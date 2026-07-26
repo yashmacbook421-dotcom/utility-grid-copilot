@@ -1,0 +1,49 @@
+services:
+  db:
+    image: timescale/timescaledb-ha:pg16
+    container_name: grid-copilot-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: grid
+      POSTGRES_PASSWORD: grid
+      POSTGRES_DB: grid_copilot
+    ports:
+      - "5432:5432"
+    volumes:
+      - grid_copilot_db_data:/home/postgres/pgdata/data
+      - ./db/init.sql:/docker-entrypoint-initdb.d/00-extensions.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U grid -d grid_copilot"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: ./backend
+    container_name: grid-copilot-backend
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env
+    environment:
+      DATABASE_URL: postgresql+psycopg://grid:grid@db:5432/grid_copilot
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+
+  frontend:
+    build: ./frontend
+    container_name: grid-copilot-frontend
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:8000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+
+volumes:
+  grid_copilot_db_data:

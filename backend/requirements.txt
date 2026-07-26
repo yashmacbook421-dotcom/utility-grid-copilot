@@ -1,0 +1,13 @@
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+sqlalchemy==2.0.35
+psycopg[binary]==3.2.1
+pgvector==0.3.4
+pydantic==2.9.2
+pydantic-settings==2.5.2
+anthropic>=0.40.0,<1.0.0
+sentence-transformers==3.1.1
+scikit-learn==1.5.2
+pandas==2.2.3
+numpy==2.1.1
+python-dotenv==1.0.1
