@@ -2,6 +2,7 @@
 __pycache__/
 *.pyc
 backend/.env
+backend/app/evals/reports/
 
 # Node / Next.js
 frontend/node_modules/

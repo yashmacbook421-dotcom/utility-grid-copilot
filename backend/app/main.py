@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.init_db import init_db
-from app.routers import forecast, ingest, recommend
+from app.routers import forecast, ingest, observability, recommend
 
 logging.basicConfig(level=logging.INFO)
 
@@ -20,6 +20,7 @@ app.add_middleware(
 app.include_router(forecast.router)
 app.include_router(recommend.router)
 app.include_router(ingest.router)
+app.include_router(observability.router)
 
 
 @app.on_event("startup")

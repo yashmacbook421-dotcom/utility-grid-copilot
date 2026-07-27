@@ -35,6 +35,7 @@ export interface RecommendationResponse {
   answer: string;
   sources: SourceCitation[];
   forecast_context: ForecastResponse | null;
+  warnings: string[];
 }
 
 export interface ChartRow {

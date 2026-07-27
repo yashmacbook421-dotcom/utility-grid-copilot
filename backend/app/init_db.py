@@ -3,7 +3,7 @@ import logging
 from sqlalchemy import text
 
 from app.db import Base, engine
-from app.models import DemandReading, ProcedureDocument  # noqa: F401  (register models)
+from app.models import DemandReading, ProcedureDocument, RequestLog  # noqa: F401  (register models)
 
 logger = logging.getLogger(__name__)
 
@@ -28,15 +28,4 @@ def init_db() -> None:
             )
         )
 
-        conn.execute(
-            text(
-                """
-                CREATE INDEX IF NOT EXISTS procedure_documents_embedding_idx
-                ON procedure_documents
-                USING ivfflat (embedding vector_cosine_ops)
-                WITH (lists = 100)
-                """
-            )
-        )
-
-    logger.info("Database initialized: hypertable + vector index ready")
+    logger.info("Database initialized: hypertable ready")

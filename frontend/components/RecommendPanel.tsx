@@ -49,6 +49,13 @@ export default function RecommendPanel({ region }: { region: string }) {
 
       {result && (
         <div>
+          {result.warnings.length > 0 && (
+            <div className="error-banner">
+              {result.warnings.map((warning, i) => (
+                <p key={i}>{warning}</p>
+              ))}
+            </div>
+          )}
           <p className="recommend-answer">{result.answer}</p>
           {result.sources.length > 0 && (
             <div>

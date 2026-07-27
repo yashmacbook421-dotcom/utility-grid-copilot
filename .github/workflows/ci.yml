@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  eval:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # backend/.env is gitignored (it holds real secrets) — recreate the
+      # minimal version docker-compose needs from repo secrets. Missing
+      # ANTHROPIC_API_KEY degrades gracefully: the client stays disabled and
+      # the eval step below falls back to the free, retrieval-only run.
+      - name: Create backend .env
+        run: |
+          cat > backend/.env <<EOF
+          DATABASE_URL=postgresql+psycopg://grid:grid@db:5432/grid_copilot
+          ANTHROPIC_API_KEY=${{ secrets.ANTHROPIC_API_KEY }}
+          CLAUDE_MODEL=claude-sonnet-5
+          EMBEDDING_MODEL=all-MiniLM-L6-v2
+          EOF
+
+      - name: Build and start the stack
+        run: docker compose up -d --build db backend
+
+      - name: Wait for backend health check
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:8000/health > /dev/null; then
+              echo "backend is healthy"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "backend never became healthy" >&2
+          docker compose logs backend
+          exit 1
+
+      - name: Seed the database (synthetic demand + procedures)
+        run: docker compose exec -T backend python -m app.data.seed
+
+      - name: Run retrieval eval (no Anthropic calls, always runs)
+        run: docker compose exec -T backend python -m app.evals.run --no-judge
+
+      - name: Run full eval including LLM-judge (only if ANTHROPIC_API_KEY is set)
+        if: ${{ secrets.ANTHROPIC_API_KEY != '' }}
+        run: docker compose exec -T backend python -m app.evals.run
+
+      - name: Dump backend logs on failure
+        if: failure()
+        run: docker compose logs backend

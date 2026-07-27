@@ -42,3 +42,28 @@ class ProcedureDocument(Base):
     embedding: Mapped[list] = mapped_column(Vector(settings.embedding_dim), nullable=False)
     doc_metadata: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+
+
+class RequestLog(Base):
+    """Per-request telemetry for /api/recommend: stage latency, token usage, cost, retrieval."""
+
+    __tablename__ = "request_logs"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    endpoint: Mapped[str] = mapped_column(String(255), nullable=False)
+    region: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    question: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    retrieval_ms: Mapped[float | None] = mapped_column(Float, nullable=True)
+    forecast_ms: Mapped[float | None] = mapped_column(Float, nullable=True)
+    generation_ms: Mapped[float | None] = mapped_column(Float, nullable=True)
+    total_ms: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    retrieved_sources: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    input_tokens: Mapped[int | None] = mapped_column(nullable=True)
+    output_tokens: Mapped[int | None] = mapped_column(nullable=True)
+    estimated_cost_usd: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
