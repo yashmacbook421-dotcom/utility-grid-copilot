@@ -27,25 +27,25 @@ export default function RecommendPanel({ region }: { region: string }) {
 
   return (
     <div className="card">
-      <p className="card-title">Ask the grid copilot</p>
-      <p className="card-subtitle">Grounded in operating procedures and the current forecast for this region.</p>
+      <p className="step-label">Step 2 · Ask your question</p>
+      <p className="card-subtitle">e.g. &ldquo;How should we handle tonight&rsquo;s peak?&rdquo;</p>
 
       <form className="recommend-form" onSubmit={handleSubmit}>
         <input
           className="recommend-input"
           type="text"
-          placeholder="e.g. How should we handle tonight's peak?"
+          placeholder="Type your question here"
           value={question}
           onChange={(e) => setQuestion(e.target.value)}
         />
         <button className="button" type="submit" disabled={loading || !question.trim()}>
-          {loading ? "Asking…" : "Ask"}
+          {loading ? "Thinking…" : "Ask"}
         </button>
       </form>
 
       {error && <div className="error-banner">{error}</div>}
 
-      {!error && !result && !loading && <p className="empty-state">Ask a question to get a grounded recommendation.</p>}
+      {!error && !result && !loading && <p className="empty-state">Ask a question above to get an answer.</p>}
 
       {result && (
         <div>
@@ -57,20 +57,23 @@ export default function RecommendPanel({ region }: { region: string }) {
             </div>
           )}
           <p className="recommend-answer">{result.answer}</p>
+
           {result.sources.length > 0 && (
-            <div>
-              <p className="sources-title">Sources</p>
-              {result.sources.map((source, i) => (
-                <div className="source-card" key={`${source.source}-${i}`}>
-                  <div className="source-head">
-                    <span className="source-title">{source.title}</span>
-                    <span className="source-similarity">{Math.round(source.similarity * 100)}% match</span>
+            <details className="details-toggle">
+              <summary>Show how this answer was found ({result.sources.length} source{result.sources.length === 1 ? "" : "s"})</summary>
+              <div className="details-body">
+                {result.sources.map((source, i) => (
+                  <div className="source-card" key={`${source.source}-${i}`}>
+                    <div className="source-head">
+                      <span className="source-title">{source.title}</span>
+                      <span className="source-similarity">{Math.round(source.similarity * 100)}% relevant</span>
+                    </div>
+                    <p className="source-name">{source.source}</p>
+                    <p className="source-excerpt">{source.excerpt}</p>
                   </div>
-                  <p className="source-name">{source.source}</p>
-                  <p className="source-excerpt">{source.excerpt}</p>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            </details>
           )}
         </div>
       )}
