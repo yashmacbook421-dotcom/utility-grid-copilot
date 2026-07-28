@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     claude_model: str = "claude-sonnet-5"
     embedding_model: str = "all-MiniLM-L6-v2"
     embedding_dim: int = 384
+    cors_origins: str = "http://localhost:3000"
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 

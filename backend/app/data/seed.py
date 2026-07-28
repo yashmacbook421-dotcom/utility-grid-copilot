@@ -18,9 +18,14 @@ PROCEDURES_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "docs", "pr
 
 
 def seed_demand_data(days: int = 120) -> None:
+    with engine.begin() as conn:
+        count = conn.execute(text("SELECT count(*) FROM demand_readings")).scalar()
+        if count:
+            print(f"demand_readings already has {count} rows, skipping regeneration")
+            return
+
     df = generate_all(days=days)
     with engine.begin() as conn:
-        conn.execute(text("DELETE FROM demand_readings"))
         df.to_sql("demand_readings", conn, if_exists="append", index=False)
     print(f"seeded {len(df)} demand readings across {df['region'].nunique()} regions")
 
