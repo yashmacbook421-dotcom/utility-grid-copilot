@@ -2,6 +2,8 @@
 and persistence of stage latency / token usage / retrieval to `request_logs`.
 """
 
+import uuid
+
 from sqlalchemy.orm import Session
 
 from app.models import RequestLog
@@ -26,6 +28,7 @@ def log_request(
     endpoint: str,
     region: str | None = None,
     question: str | None = None,
+    embedding_ms: float | None = None,
     retrieval_ms: float | None = None,
     forecast_ms: float | None = None,
     generation_ms: float | None = None,
@@ -36,22 +39,28 @@ def log_request(
     estimated_cost_usd: float | None = None,
     status: str,
     error_message: str | None = None,
-) -> None:
-    db.add(
-        RequestLog(
-            endpoint=endpoint,
-            region=region,
-            question=question,
-            retrieval_ms=retrieval_ms,
-            forecast_ms=forecast_ms,
-            generation_ms=generation_ms,
-            total_ms=total_ms,
-            retrieved_sources=retrieved_sources or [],
-            input_tokens=input_tokens,
-            output_tokens=output_tokens,
-            estimated_cost_usd=estimated_cost_usd,
-            status=status,
-            error_message=error_message,
-        )
+) -> uuid.UUID:
+    """Returns the created row's id — lets a caller (e.g. /api/recommend)
+    hand it back to the client so a later feedback submission can reference
+    exactly which answer it's rating (see AnswerFeedback in models.py).
+    """
+    log = RequestLog(
+        endpoint=endpoint,
+        region=region,
+        question=question,
+        embedding_ms=embedding_ms,
+        retrieval_ms=retrieval_ms,
+        forecast_ms=forecast_ms,
+        generation_ms=generation_ms,
+        total_ms=total_ms,
+        retrieved_sources=retrieved_sources or [],
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+        estimated_cost_usd=estimated_cost_usd,
+        status=status,
+        error_message=error_message,
     )
+    db.add(log)
     db.commit()
+    db.refresh(log)
+    return log.id

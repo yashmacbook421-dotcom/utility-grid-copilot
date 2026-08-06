@@ -1,0 +1,167 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import { approveSurge, listPendingSurges, rejectSurge } from "@/lib/api";
+import { SurgeEvent } from "@/lib/types";
+import SourceCard from "@/components/SourceCard";
+import { splitBottomLine } from "@/lib/answerFormat";
+
+const POLL_INTERVAL_MS = 30_000;
+
+function formatRegionName(region: string): string {
+  return region
+    .split("-")
+    .map((word) => word[0].toUpperCase() + word.slice(1))
+    .join(" ");
+}
+
+export default function SurgePanel() {
+  const [surges, setSurges] = useState<SurgeEvent[]>([]);
+  const [resolvingId, setResolvingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    function poll() {
+      listPendingSurges()
+        .then((list) => {
+          if (!cancelled) setSurges(list);
+        })
+        .catch(() => {
+          // Silent: this is a background convenience panel, not a critical path —
+          // a failed poll just tries again next interval.
+        });
+    }
+
+    poll();
+    const interval = setInterval(poll, POLL_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, []);
+
+  async function handleResolve(id: string, action: "approve" | "reject") {
+    setResolvingId(id);
+    try {
+      if (action === "approve") await approveSurge(id);
+      else await rejectSurge(id);
+      setSurges((prev) => prev.filter((s) => s.id !== id));
+    } catch {
+      // Leave it in the list — the next poll will reconcile the true state.
+    } finally {
+      setResolvingId(null);
+    }
+  }
+
+  if (surges.length === 0) return null;
+
+  return (
+    <div className="card surge-panel">
+      <p className="step-label">Grid Copilot noticed something</p>
+      {surges.map((surge) => {
+        const deviationPct = (surge.forecast_peak_mw / surge.baseline_p95_mw - 1) * 100;
+        return (
+        <div className="surge-card" key={surge.id}>
+          <div className="surge-headline-row">
+            <p className="surge-headline">
+              Demand surge expected for <strong>{formatRegionName(surge.region)}</strong> —{" "}
+              {Math.round(surge.forecast_peak_mw).toLocaleString()} MW around{" "}
+              {new Date(surge.peak_forecast_time).toLocaleString(undefined, {
+                weekday: "long",
+                hour: "numeric",
+                minute: "2-digit",
+              })}
+              , above its typical high end (~{Math.round(surge.baseline_p95_mw).toLocaleString()} MW).
+            </p>
+            <span className={`severity-badge severity-${surge.severity}`}>{surge.severity} severity</span>
+          </div>
+
+          <details className="details-toggle">
+            <summary>Why this alert triggered</summary>
+            <div className="details-body why-alert-grid">
+              <div>
+                <span className="why-alert-label">Forecast peak</span>
+                <span className="why-alert-value">{Math.round(surge.forecast_peak_mw).toLocaleString()} MW</span>
+              </div>
+              <div>
+                <span className="why-alert-label">Normal high end (95th percentile, 30d)</span>
+                <span className="why-alert-value">{Math.round(surge.baseline_p95_mw).toLocaleString()} MW</span>
+              </div>
+              <div>
+                <span className="why-alert-label">Deviation</span>
+                <span className="why-alert-value">+{deviationPct.toFixed(1)}%</span>
+              </div>
+              <div>
+                <span className="why-alert-label">Forecast model</span>
+                <span className="why-alert-value">HistGradientBoostingRegressor</span>
+              </div>
+              <div>
+                <span className="why-alert-label">Notification</span>
+                <span className="why-alert-value">
+                  {surge.notified ? "Sent" : surge.notification_error ? "Failed" : "Not configured"}
+                </span>
+              </div>
+            </div>
+          </details>
+
+          {(() => {
+            const { headline, rest } = splitBottomLine(surge.recommended_action);
+            if (!headline) {
+              return (
+                <div className="surge-recommendation markdown-body">
+                  <ReactMarkdown>{surge.recommended_action}</ReactMarkdown>
+                </div>
+              );
+            }
+            return (
+              <div className="surge-recommendation">
+                <div className="answer-headline markdown-body">
+                  <ReactMarkdown>{headline}</ReactMarkdown>
+                </div>
+                {rest && (
+                  <details className="details-toggle">
+                    <summary>Show full reasoning</summary>
+                    <div className="details-body markdown-body">
+                      <ReactMarkdown>{rest}</ReactMarkdown>
+                    </div>
+                  </details>
+                )}
+              </div>
+            );
+          })()}
+
+          {surge.sources.length > 0 && (
+            <details className="details-toggle">
+              <summary>Show how this was found ({surge.sources.length} source{surge.sources.length === 1 ? "" : "s"})</summary>
+              <div className="details-body">
+                {surge.sources.map((source, i) => (
+                  <SourceCard source={source} key={`${source.source}-${i}`} />
+                ))}
+              </div>
+            </details>
+          )}
+
+          <div className="surge-actions">
+            <button
+              className="button"
+              disabled={resolvingId === surge.id}
+              onClick={() => handleResolve(surge.id, "approve")}
+            >
+              Approve
+            </button>
+            <button
+              className="button button-outline"
+              disabled={resolvingId === surge.id}
+              onClick={() => handleResolve(surge.id, "reject")}
+            >
+              Reject
+            </button>
+          </div>
+        </div>
+        );
+      })}
+    </div>
+  );
+}

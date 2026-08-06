@@ -114,10 +114,15 @@ def forecast(db: Session, region: str, region_profile: dict, horizon_hours: int 
     last_time = history["time"].max()
     future_times = pd.date_range(start=last_time + timedelta(hours=1), periods=horizon_hours, freq="h")
 
+    has_temperature = region_profile.get("has_temperature", True)
     future_df = pd.DataFrame(
         {
             "time": future_times,
-            "temperature_c": [estimate_future_temperature(region_profile, t) for t in future_times],
+            "temperature_c": (
+                [estimate_future_temperature(region_profile, t) for t in future_times]
+                if has_temperature
+                else [float("nan")] * len(future_times)
+            ),
             "is_holiday": [t.month == 12 and t.day in (25, 26) for t in future_times],
         }
     )
@@ -158,4 +163,36 @@ def forecast(db: Session, region: str, region_profile: dict, horizon_hours: int 
         "forecast": forecast_points,
         "peak_forecast_mw": forecast_points[peak_idx]["predicted_demand_mw"],
         "peak_forecast_time": forecast_points[peak_idx]["time"],
+    }
+
+
+def forecast_whatif(
+    db: Session, region: str, region_profile: dict, demand_multiplier: float, horizon_hours: int = 24
+) -> dict:
+    """"What if demand is X% higher/lower" — scales the trained model's own
+    forecast rather than retraining or guessing. A direct, literal answer to
+    "what happens if demand increases by 10%," and (unlike perturbing the
+    temperature input) works uniformly across every region including
+    california, which has no temperature signal to perturb in the first
+    place (see forecast()'s has_temperature handling above).
+    """
+    base = forecast(db, region, region_profile, horizon_hours=horizon_hours)
+
+    scaled_points = [
+        {
+            "time": p["time"],
+            "predicted_demand_mw": round(p["predicted_demand_mw"] * demand_multiplier, 2),
+            "lower_bound_mw": round(p["lower_bound_mw"] * demand_multiplier, 2),
+            "upper_bound_mw": round(p["upper_bound_mw"] * demand_multiplier, 2),
+        }
+        for p in base["forecast"]
+    ]
+    peak_idx = max(range(len(scaled_points)), key=lambda i: scaled_points[i]["predicted_demand_mw"])
+
+    return {
+        **base,
+        "forecast": scaled_points,
+        "peak_forecast_mw": scaled_points[peak_idx]["predicted_demand_mw"],
+        "peak_forecast_time": scaled_points[peak_idx]["time"],
+        "demand_multiplier": demand_multiplier,
     }

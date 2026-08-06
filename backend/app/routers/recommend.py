@@ -28,7 +28,14 @@ _client: Anthropic | None = (
 def recommend(payload: RecommendationRequest, request: Request, db: Session = Depends(get_db)):
     rate_limiter.enforce(request)
 
-    cache_key = cache.make_key(payload.region, payload.question, str(payload.top_k))
+    cache_key = cache.make_key(
+        payload.region,
+        payload.question,
+        str(payload.top_k),
+        payload.source_organization or "",
+        payload.source_document_type or "",
+        payload.source_region or "",
+    )
     cached = cache.get(cache_key)
     if cached is not None:
         observability.log_request(
@@ -52,9 +59,18 @@ def recommend(payload: RecommendationRequest, request: Request, db: Session = De
 
     start = time.perf_counter()
     try:
-        retrieval_start = time.perf_counter()
-        sources = rag.retrieve(db, payload.question, top_k=payload.top_k)
-        retrieval_ms = (time.perf_counter() - retrieval_start) * 1000
+        retrieval_timing: dict = {}
+        sources = rag.retrieve(
+            db,
+            payload.question,
+            top_k=payload.top_k,
+            timing=retrieval_timing,
+            organization=payload.source_organization,
+            document_type=payload.source_document_type,
+            region=payload.source_region,
+        )
+        embedding_ms = retrieval_timing.get("embedding_ms")
+        retrieval_ms = retrieval_timing.get("search_ms")
 
         forecast_data = None
         forecast_summary = None
@@ -104,16 +120,26 @@ def recommend(payload: RecommendationRequest, request: Request, db: Session = De
     total_ms = (time.perf_counter() - start) * 1000
     cost = observability.estimate_cost_usd(settings.claude_model, generation.input_tokens, generation.output_tokens)
 
-    observability.log_request(
+    request_log_id = observability.log_request(
         db,
         endpoint="/api/recommend",
         region=payload.region,
         question=payload.question,
+        embedding_ms=embedding_ms,
         retrieval_ms=retrieval_ms,
         forecast_ms=forecast_ms,
         generation_ms=generation_ms,
         total_ms=total_ms,
-        retrieved_sources=[{"title": s.title, "similarity": s.similarity} for s in sources],
+        retrieved_sources=[
+            {
+                "title": s.title,
+                "similarity": s.similarity,
+                "page_number": s.page_number,
+                "section": s.section,
+                "organization": s.organization,
+            }
+            for s in sources
+        ],
         input_tokens=generation.input_tokens,
         output_tokens=generation.output_tokens,
         estimated_cost_usd=cost,
@@ -127,6 +153,7 @@ def recommend(payload: RecommendationRequest, request: Request, db: Session = De
         sources=sources,
         forecast_context=forecast_data,
         warnings=warnings,
+        request_log_id=request_log_id,
     )
     cache.set(cache_key, response)
     return response
@@ -182,14 +209,23 @@ def recommend_agentic(payload: RecommendationRequest, request: Request, db: Sess
         )
 
     cost = observability.estimate_cost_usd(settings.claude_model, result.input_tokens, result.output_tokens)
-    observability.log_request(
+    request_log_id = observability.log_request(
         db,
         endpoint="/api/recommend/agentic",
         region=payload.region,
         question=payload.question,
         generation_ms=total_ms,
         total_ms=total_ms,
-        retrieved_sources=[{"title": s.title, "similarity": s.similarity} for s in sources],
+        retrieved_sources=[
+            {
+                "title": s.title,
+                "similarity": s.similarity,
+                "page_number": s.page_number,
+                "section": s.section,
+                "organization": s.organization,
+            }
+            for s in sources
+        ],
         input_tokens=result.input_tokens,
         output_tokens=result.output_tokens,
         estimated_cost_usd=cost,
@@ -205,4 +241,5 @@ def recommend_agentic(payload: RecommendationRequest, request: Request, db: Sess
         forecast_context=result.forecast_context,
         warnings=warnings,
         iterations=result.iterations,
+        request_log_id=request_log_id,
     )

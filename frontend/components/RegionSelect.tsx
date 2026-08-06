@@ -1,6 +1,11 @@
 "use client";
 
-function formatRegionLabel(region: string): string {
+const REGION_LABEL_OVERRIDES: Record<string, string> = {
+  california: "California (real CAISO data)",
+};
+
+export function formatRegionLabel(region: string): string {
+  if (REGION_LABEL_OVERRIDES[region]) return REGION_LABEL_OVERRIDES[region];
   return region
     .split("-")
     .map((word) => word[0].toUpperCase() + word.slice(1))

@@ -6,8 +6,15 @@ import { ForecastResponse } from "@/lib/types";
 import RegionSelect from "@/components/RegionSelect";
 import ForecastCards from "@/components/ForecastCards";
 import RecommendPanel from "@/components/RecommendPanel";
+import SurgePanel from "@/components/SurgePanel";
+import RegionalDashboard from "@/components/RegionalDashboard";
+import WhatIfPanel from "@/components/WhatIfPanel";
+import MonitoringDashboard from "@/components/MonitoringDashboard";
+
+type Tab = "dashboard" | "ask" | "monitoring";
 
 export default function Home() {
+  const [tab, setTab] = useState<Tab>("dashboard");
   const [regions, setRegions] = useState<string[]>([]);
   const [region, setRegion] = useState<string>("");
   const [forecast, setForecast] = useState<ForecastResponse | null>(null);
@@ -33,6 +40,11 @@ export default function Home() {
       .finally(() => setLoading(false));
   }, [region]);
 
+  function handleSelectRegion(selected: string) {
+    setRegion(selected);
+    setTab("ask");
+  }
+
   return (
     <div className="container">
       <header className="hero">
@@ -42,40 +54,63 @@ export default function Home() {
 
       {error && <div className="error-banner">{error}</div>}
 
-      <div className="card">
-        <p className="step-label">Step 1 · Choose your area</p>
-        {regions.length > 0 && <RegionSelect regions={regions} value={region} onChange={setRegion} />}
+      <nav className="tab-row">
+        <button className={`tab-button${tab === "dashboard" ? " tab-button-active" : ""}`} onClick={() => setTab("dashboard")}>
+          Dashboard
+        </button>
+        <button className={`tab-button${tab === "ask" ? " tab-button-active" : ""}`} onClick={() => setTab("ask")}>
+          Ask
+        </button>
+        <button className={`tab-button${tab === "monitoring" ? " tab-button-active" : ""}`} onClick={() => setTab("monitoring")}>
+          Monitoring
+        </button>
+      </nav>
 
-        {loading && !forecast && <p className="empty-state" style={{ marginTop: 16 }}>Loading forecast…</p>}
+      {tab === "dashboard" && <RegionalDashboard onSelectRegion={handleSelectRegion} />}
 
-        {forecast && (
-          <div className="forecast-summary">
-            <p className="forecast-summary-text">
-              Expected peak demand is <strong>{Math.round(forecast.peak_forecast_mw).toLocaleString()} MW</strong>,
-              around{" "}
-              <strong>
-                {new Date(forecast.peak_forecast_time).toLocaleString(undefined, {
-                  weekday: "long",
-                  hour: "numeric",
-                  minute: "2-digit",
-                })}
-              </strong>
-              .
-            </p>
+      {tab === "ask" && (
+        <>
+          <SurgePanel />
+
+          <div className="card">
+            <p className="step-label">Step 1 · Choose your area</p>
+            {regions.length > 0 && <RegionSelect regions={regions} value={region} onChange={setRegion} />}
+
+            {loading && !forecast && <p className="empty-state" style={{ marginTop: 16 }}>Loading forecast…</p>}
+
+            {forecast && (
+              <div className="forecast-summary">
+                <p className="forecast-summary-text">
+                  Expected peak demand is <strong>{Math.round(forecast.peak_forecast_mw).toLocaleString()} MW</strong>,
+                  around{" "}
+                  <strong>
+                    {new Date(forecast.peak_forecast_time).toLocaleString(undefined, {
+                      weekday: "long",
+                      hour: "numeric",
+                      minute: "2-digit",
+                    })}
+                  </strong>
+                  .
+                </p>
+              </div>
+            )}
+
+            {forecast && (
+              <details className="details-toggle">
+                <summary>Show hour-by-hour forecast</summary>
+                <div className="details-body">
+                  <ForecastCards data={forecast} />
+                </div>
+              </details>
+            )}
           </div>
-        )}
 
-        {forecast && (
-          <details className="details-toggle">
-            <summary>Show hour-by-hour forecast</summary>
-            <div className="details-body">
-              <ForecastCards data={forecast} />
-            </div>
-          </details>
-        )}
-      </div>
+          {region && <RecommendPanel region={region} />}
+          {region && <WhatIfPanel region={region} />}
+        </>
+      )}
 
-      {region && <RecommendPanel region={region} />}
+      {tab === "monitoring" && <MonitoringDashboard />}
     </div>
   );
 }
