@@ -19,6 +19,11 @@ REGION_PROFILES = {
     "north-valley": {"base_mw": 1800, "temp_mean_c": 14, "temp_amplitude": 10, "solar_capacity_mw": 400, "ev_capacity_mw": 150},
     "coastal-metro": {"base_mw": 3200, "temp_mean_c": 17, "temp_amplitude": 6, "solar_capacity_mw": 500, "ev_capacity_mw": 400},
     "high-desert": {"base_mw": 900, "temp_mean_c": 19, "temp_amplitude": 16, "solar_capacity_mw": 600, "ev_capacity_mw": 80},
+    # Real data (EIA, CISO balancing authority) — not in REGIONS, so the
+    # synthetic generator below never fabricates rows for it. No temperature
+    # source is wired up for real data, so forecasting.py skips temperature
+    # projection for any region with has_temperature=False.
+    "california": {"has_temperature": False},
 }
 
 RNG = np.random.default_rng(42)

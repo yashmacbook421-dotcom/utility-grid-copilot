@@ -5,6 +5,7 @@ expected procedure(s) actually come back in the top-k results.
 """
 
 from dataclasses import dataclass, field
+from typing import Callable
 
 from sqlalchemy.orm import Session
 
@@ -63,11 +64,11 @@ class RetrievalReport:
         return sum(1 for r in out_of_scope if r.retrieved_titles) / len(out_of_scope)
 
 
-def evaluate_retrieval(db: Session, top_k: int = 4) -> RetrievalReport:
+def evaluate_retrieval(db: Session, top_k: int = 4, retrieve_fn: Callable = rag.retrieve) -> RetrievalReport:
     report = RetrievalReport()
 
     for item in GOLDEN_SET:
-        sources = rag.retrieve(db, item.question, top_k=top_k)
+        sources = retrieve_fn(db, item.question, top_k=top_k)
         retrieved_titles = [s.title for s in sources]
         expected = set(item.expected_sources)
 

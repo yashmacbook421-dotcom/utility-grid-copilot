@@ -1,8 +1,8 @@
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import DateTime, Float, ForeignKey, String, Text
+from sqlalchemy import Date, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -24,24 +24,70 @@ class DemandReading(Base):
     time: Mapped[datetime] = mapped_column(DateTime(timezone=True), primary_key=True)
     region: Mapped[str] = mapped_column(String(64), primary_key=True)
     demand_mw: Mapped[float] = mapped_column(Float, nullable=False)
-    temperature_c: Mapped[float] = mapped_column(Float, nullable=False)
+    # Nullable: regions backed by real data (e.g. California/EIA) don't have a
+    # paired temperature reading — no weather source is wired up for them.
+    # HistGradientBoostingRegressor (forecasting.py) natively handles NaN
+    # features, so this is a deliberate scope choice, not a workaround.
+    temperature_c: Mapped[float | None] = mapped_column(Float, nullable=True)
     solar_generation_mw: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     ev_load_mw: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     is_holiday: Mapped[bool] = mapped_column(default=False)
 
 
-class ProcedureDocument(Base):
-    """A chunk of a grid operating procedure / incident playbook, embedded for RAG retrieval."""
+class Document(Base):
+    """A single source document (real, e.g. a NERC/CAISO/FERC/CPUC PDF, or
+    synthetic, one of the original hand-written procedure files) that's been
+    ingested for RAG retrieval. A document has many DocumentChunks.
 
-    __tablename__ = "procedure_documents"
+    `organization="synthetic"` marks the original 4 hand-written procedure
+    docs — kept alongside real documents in the same schema/retrieval path
+    rather than a separate table, so there's one retrieval code path, not two.
+    """
+
+    __tablename__ = "documents"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    source: Mapped[str] = mapped_column(String(255), nullable=False)
-    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    title: Mapped[str] = mapped_column(String(500), nullable=False)
+    organization: Mapped[str] = mapped_column(String(255), nullable=False)
+    document_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    source_url: Mapped[str] = mapped_column(Text, nullable=False)
+    publication_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    region: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    ingested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+
+
+class DocumentChunk(Base):
+    """One retrievable, embedded chunk of a Document. `page_number`/`section`
+    are nullable — real PDFs have them, the synthetic markdown docs don't.
+    """
+
+    __tablename__ = "document_chunks"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    document_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("documents.id"), nullable=False)
+    chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
     embedding: Mapped[list] = mapped_column(Vector(settings.embedding_dim), nullable=False)
-    doc_metadata: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    page_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    section: Mapped[str | None] = mapped_column(String(500), nullable=True)
+
+
+class IngestionRun(Base):
+    """One attempt to ingest a document (success or failure) — an audit
+    trail for the ingestion pipeline itself, separate from the documents it
+    produces.
+    """
+
+    __tablename__ = "ingestion_runs"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    document_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("documents.id"), nullable=True)
+    source_path_or_url: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    chunks_created: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class RequestLog(Base):
@@ -55,6 +101,7 @@ class RequestLog(Base):
     region: Mapped[str | None] = mapped_column(String(64), nullable=True)
     question: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    embedding_ms: Mapped[float | None] = mapped_column(Float, nullable=True)
     retrieval_ms: Mapped[float | None] = mapped_column(Float, nullable=True)
     forecast_ms: Mapped[float | None] = mapped_column(Float, nullable=True)
     generation_ms: Mapped[float | None] = mapped_column(Float, nullable=True)
@@ -67,3 +114,51 @@ class RequestLog(Base):
 
     status: Mapped[str] = mapped_column(String(16), nullable=False)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class SurgeEvent(Base):
+    """A demand surge the background watcher detected and drafted a
+    recommendation for — awaiting human approval/rejection. See
+    app/services/surge_watcher.py for the detection + generation logic.
+    """
+
+    __tablename__ = "surge_events"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    region: Mapped[str] = mapped_column(String(64), nullable=False)
+
+    forecast_peak_mw: Mapped[float] = mapped_column(Float, nullable=False)
+    baseline_p95_mw: Mapped[float] = mapped_column(Float, nullable=False)
+    peak_forecast_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    recommended_action: Mapped[str] = mapped_column(Text, nullable=False)
+    sources: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+
+    # "medium"/"high" — a reasoned first-pass split on how far the forecast
+    # exceeds baseline_p95_mw, not calibrated against a large real sample
+    # (surges are rare by design). Informational only — every severity
+    # still requires human approval; this doesn't gate that.
+    severity: Mapped[str] = mapped_column(String(16), nullable=False, default="medium")
+    notified: Mapped[bool] = mapped_column(default=False)
+    notification_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    resolved_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class AnswerFeedback(Base):
+    """A thumbs up/down on a specific answer, referenced by the RequestLog
+    row it came from — reuses that row's region/question/answer/sources
+    rather than duplicating them here.
+    """
+
+    __tablename__ = "answer_feedback"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    request_log_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("request_logs.id"), nullable=False)
+    rating: Mapped[str] = mapped_column(String(8), nullable=False)  # "up" | "down"
+    reason: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)

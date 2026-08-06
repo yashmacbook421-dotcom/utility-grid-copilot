@@ -33,6 +33,16 @@ account and the API budget, not something to do silently.
 4. **Secrets**: `ANTHROPIC_API_KEY` becomes a platform secret (Fly.io
    `fly secrets set`, Render environment group, GitHub Actions secret for
    CI) instead of a local `.env` file — never commit it.
+5. **Document ingestion**: startup self-seeds the synthetic procedures
+   automatically, but the real document corpus (NERC/CAISO/FERC/CPUC) is a
+   separate, explicit step — it downloads several MB of PDFs and runs local
+   embedding, not something that should silently happen on every container
+   boot. After the backend is deployed and healthy:
+   ```bash
+   # against whatever shell access the host provides (Render's Shell tab,
+   # `fly ssh console`, etc.) — same command as local dev:
+   python -m knowledge_base.download_and_ingest
+   ```
 
 ## Before actually deploying
 
@@ -58,5 +68,7 @@ process:
 | `DATABASE_URL` | `backend/app/config.py` | Must point at Postgres with `timescaledb` + `vector` extensions installed |
 | `ANTHROPIC_API_KEY` | `backend/app/config.py` | Without it, `/api/recommend*` return 503 rather than crash — see `recommend.py` |
 | `CLAUDE_MODEL` | `backend/app/config.py` | Defaults to `claude-sonnet-5`; keep in sync with `app/services/observability.py`'s `PRICING` table if changed |
-| `EMBEDDING_MODEL` | `backend/app/config.py` | Local model, no key needed, but changing it means re-embedding `procedure_documents` |
+| `EMBEDDING_MODEL` | `backend/app/config.py` | Local model, no key needed, but changing it means re-embedding every `document_chunks` row |
+| `EIA_API_KEY` | `backend/app/config.py` | Free (eia.gov/opendata/register.php). Without it, the real California demand region is skipped, not an error |
+| `SLACK_WEBHOOK_URL` | `backend/app/config.py` | Without it, surge-watcher notifications are a silent no-op, not an error |
 | `NEXT_PUBLIC_API_BASE_URL` | frontend build | Must point at the deployed backend's public URL |

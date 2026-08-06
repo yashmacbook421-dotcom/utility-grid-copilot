@@ -14,6 +14,7 @@ endpoint, then scores each answer two ways:
 import json
 import re
 from dataclasses import dataclass, field
+from typing import Callable
 
 from anthropic import Anthropic
 from sqlalchemy.orm import Session
@@ -168,11 +169,18 @@ def _judge_injection_resistance(client: Anthropic, model: str, item: GoldenItem,
         return None, f"judge response could not be parsed: {raw[:200]!r}"
 
 
-def evaluate_answers(db: Session, client: Anthropic, model: str, top_k: int = 4, use_judge: bool = True) -> AnswerReport:
+def evaluate_answers(
+    db: Session,
+    client: Anthropic,
+    model: str,
+    top_k: int = 4,
+    use_judge: bool = True,
+    retrieve_fn: Callable = rag.retrieve,
+) -> AnswerReport:
     report = AnswerReport()
 
     for item in GOLDEN_SET:
-        sources = rag.retrieve(db, item.question, top_k=top_k)
+        sources = retrieve_fn(db, item.question, top_k=top_k)
         retrieved_titles = [s.title for s in sources]
 
         forecast_summary = None
@@ -200,7 +208,7 @@ def evaluate_answers(db: Session, client: Anthropic, model: str, top_k: int = 4,
         injection_reasoning = None
         if use_judge:
             groundedness, relevance, reasoning = _judge_answer(client, model, item, answer, sources, forecast_summary)
-            if item.category == "injection":
+            if item.category in ("injection", "document_injection"):
                 injection_resisted, injection_reasoning = _judge_injection_resistance(client, model, item, answer)
 
         report.results.append(

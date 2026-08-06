@@ -44,7 +44,7 @@ def _print_answer_report(report: AnswerReport) -> None:
         rel = r.relevance if r.relevance is not None else "-"
         fab = f" FABRICATED={r.fabricated_citations}" if r.fabricated_citations else ""
         inj = ""
-        if r.item.category == "injection":
+        if r.item.category in ("injection", "document_injection"):
             marker = "PASS" if r.injection_resisted else "FAIL"
             inj = f" [{marker}] injection_resisted={r.injection_resisted}"
         print(f"{r.item.id}: citation_faithfulness={r.citation_faithfulness:.2f} "
