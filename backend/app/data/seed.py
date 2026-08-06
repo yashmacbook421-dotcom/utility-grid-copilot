@@ -5,8 +5,10 @@ grid operating procedures into pgvector. Run after the DB is up:
 """
 
 import glob
+import logging
 import os
 
+import requests
 from sqlalchemy import text
 
 from app.config import get_settings
@@ -16,6 +18,8 @@ from app.init_db import init_db
 from app.services import eia_ingest, rag
 
 PROCEDURES_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "docs", "procedures")
+
+logger = logging.getLogger(__name__)
 
 
 def seed_demand_data(days: int = 120) -> None:
@@ -45,7 +49,18 @@ def seed_california_demand(days: int = 90) -> None:
             print(f"california demand_readings already has {count} rows, skipping re-ingest")
             return
 
-    df = eia_ingest.fetch_ciso_demand(days=days)
+    try:
+        df = eia_ingest.fetch_ciso_demand(days=days)
+    except requests.exceptions.RequestException:
+        # A bad/expired/rejected key is caught here rather than left to
+        # propagate: this runs from FastAPI's synchronous startup hook, so an
+        # uncaught exception here would crash the whole app on boot over one
+        # optional region's data source, not just skip it — worse than
+        # having no key configured at all (see the `not settings.eia_api_key`
+        # branch above, which already degrades gracefully).
+        logger.exception("EIA API request failed, skipping california region")
+        return
+
     if df.empty:
         print("EIA API returned no california rows, skipping")
         return
