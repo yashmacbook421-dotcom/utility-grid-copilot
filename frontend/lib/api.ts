@@ -65,6 +65,14 @@ export async function rejectSurge(id: string): Promise<SurgeEvent> {
   return handleResponse<SurgeEvent>(res);
 }
 
+export async function triggerDemoSurge(region: string): Promise<SurgeEvent> {
+  const params = new URLSearchParams({ region });
+  const res = await fetch(`${API_BASE_URL}/api/surges/demo-trigger?${params.toString()}`, {
+    method: "POST",
+  });
+  return handleResponse<SurgeEvent>(res);
+}
+
 export async function getRegionStatuses(): Promise<RegionStatus[]> {
   const res = await fetch(`${API_BASE_URL}/api/dashboard/regions`, { cache: "no-store" });
   const data = await handleResponse<{ regions: RegionStatus[] }>(res);

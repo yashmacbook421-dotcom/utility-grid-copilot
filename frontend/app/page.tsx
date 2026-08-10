@@ -46,23 +46,34 @@ export default function Home() {
   }
 
   return (
-    <div className="container">
+    <main className="container app-shell">
       <header className="hero">
-        <h1>Grid Copilot</h1>
-        <p>Ask a question in plain English and get a clear answer about your grid.</p>
+        <div className="hero-topline">
+          <div className="brand-lockup">
+            <span className="brand-mark" aria-hidden="true"><i /><i /><i /></span>
+            <span>UTILITY INTELLIGENCE</span>
+          </div>
+          <div className="live-indicator"><span /> Systems live</div>
+        </div>
+        <div className="hero-copy">
+          <p className="hero-eyebrow">Grid operations, made legible</p>
+          <h1>See the signal.<br /><em>Act with context.</em></h1>
+          <p>Forecast demand, investigate grid conditions, and get source-backed operational guidance in one focused workspace.</p>
+        </div>
+        <div className="hero-orbit" aria-hidden="true"><span /><span /><span /></div>
       </header>
 
       {error && <div className="error-banner">{error}</div>}
 
       <nav className="tab-row">
         <button className={`tab-button${tab === "dashboard" ? " tab-button-active" : ""}`} onClick={() => setTab("dashboard")}>
-          Dashboard
+          <span aria-hidden="true">◫</span> Command center
         </button>
         <button className={`tab-button${tab === "ask" ? " tab-button-active" : ""}`} onClick={() => setTab("ask")}>
-          Ask
+          <span aria-hidden="true">✦</span> Copilot
         </button>
         <button className={`tab-button${tab === "monitoring" ? " tab-button-active" : ""}`} onClick={() => setTab("monitoring")}>
-          Monitoring
+          <span aria-hidden="true">◌</span> Observability
         </button>
       </nav>
 
@@ -70,7 +81,7 @@ export default function Home() {
 
       {tab === "ask" && (
         <>
-          <SurgePanel />
+          {region && <SurgePanel region={region} />}
 
           <div className="card">
             <p className="step-label">Step 1 · Choose your area</p>
@@ -111,6 +122,6 @@ export default function Home() {
       )}
 
       {tab === "monitoring" && <MonitoringDashboard />}
-    </div>
+    </main>
   );
 }

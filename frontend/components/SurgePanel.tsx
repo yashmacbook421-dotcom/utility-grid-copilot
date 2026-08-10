@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
-import { approveSurge, listPendingSurges, rejectSurge } from "@/lib/api";
+import { approveSurge, listPendingSurges, rejectSurge, triggerDemoSurge } from "@/lib/api";
 import { SurgeEvent } from "@/lib/types";
 import SourceCard from "@/components/SourceCard";
 import { splitBottomLine } from "@/lib/answerFormat";
@@ -16,9 +16,11 @@ function formatRegionName(region: string): string {
     .join(" ");
 }
 
-export default function SurgePanel() {
+export default function SurgePanel({ region }: { region: string }) {
   const [surges, setSurges] = useState<SurgeEvent[]>([]);
   const [resolvingId, setResolvingId] = useState<string | null>(null);
+  const [triggering, setTriggering] = useState(false);
+  const [triggerError, setTriggerError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -42,6 +44,20 @@ export default function SurgePanel() {
     };
   }, []);
 
+  async function handleDemoTrigger() {
+    setTriggering(true);
+    setTriggerError(null);
+    try {
+      await triggerDemoSurge(region);
+      const list = await listPendingSurges();
+      setSurges(list);
+    } catch (err) {
+      setTriggerError(err instanceof Error ? err.message : "Failed to trigger a demo surge.");
+    } finally {
+      setTriggering(false);
+    }
+  }
+
   async function handleResolve(id: string, action: "approve" | "reject") {
     setResolvingId(id);
     try {
@@ -55,11 +71,18 @@ export default function SurgePanel() {
     }
   }
 
-  if (surges.length === 0) return null;
-
   return (
-    <div className="card surge-panel">
-      <p className="step-label">Grid Copilot noticed something</p>
+    <div className={`card surge-panel${surges.length === 0 ? " surge-panel-idle" : ""}`}>
+      <div className="surge-panel-header">
+        <p className="step-label" style={{ margin: 0 }}>
+          {surges.length > 0 ? "Grid Copilot noticed something" : "No active alerts"}
+        </p>
+        <button className="button button-outline button-small" onClick={handleDemoTrigger} disabled={triggering}>
+          {triggering ? "Triggering…" : `Trigger demo surge (${formatRegionName(region)})`}
+        </button>
+      </div>
+      {triggerError && <div className="error-banner" style={{ marginTop: 12 }}>{triggerError}</div>}
+
       {surges.map((surge) => {
         const deviationPct = (surge.forecast_peak_mw / surge.baseline_p95_mw - 1) * 100;
         return (

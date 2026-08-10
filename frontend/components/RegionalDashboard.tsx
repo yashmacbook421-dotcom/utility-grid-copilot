@@ -46,9 +46,15 @@ export default function RegionalDashboard({ onSelectRegion }: { onSelectRegion: 
   }, []);
 
   return (
-    <div className="card">
-      <p className="step-label">California Grid — Regional Status</p>
-      <p className="card-subtitle">Click a region to see its forecast, ask a question, or review alerts.</p>
+    <div className="card command-card">
+      <div className="card-heading-row">
+        <div>
+          <p className="step-label">Regional pulse</p>
+          <p className="card-title">Grid status at a glance</p>
+        </div>
+        <span className="refresh-note"><span /> refreshes every 30s</span>
+      </div>
+      <p className="card-subtitle">Choose a region to explore its forecast, investigate conditions, or review alerts.</p>
 
       {loading && <p className="empty-state">Loading region statuses…</p>}
       {error && <div className="error-banner">{error}</div>}
