@@ -316,6 +316,82 @@ partly a judge-rubric artifact (it explicitly scores groundedness=5 when
 there's no context and the model correctly says so) — not fully
 apples-to-apples with the other two.
 
+### California corpus expansion (2026-08-10)
+
+Added 6 more real, live-verified documents specifically to deepen
+California coverage — notably Public Safety Power Shutoff (PSPS)
+wildfire-driven de-energization, which had zero coverage before despite
+being one of the most distinctly Californian grid-ops topics an operator
+would ask about. New: CAISO's PSPS fact sheet, a real CPUC PSPS
+post-event report (4.7MB, 612 chunks alone), CEC's 2025 IEPR demand
+forecast tables, CEC's Joint Agency Reliability Planning Assessment,
+CAISO's Outage Management BPM, and NERC TOP-001-5 (Transmission
+Operations). Corpus grew from 815 to 1,795 chunks.
+
+Retrieval eval, same 26-item golden set, before → after:
+
+| metric | 815 chunks | 1,795 chunks |
+|---|---|---|
+| recall@k (in-scope) | 100% | 100% — unchanged |
+| mean precision@k | 64.2% | 59.6% |
+| MRR | 1.00 | 0.95 |
+| out-of-scope false-positive rate | 50% | 83.3% |
+
+The false-positive jump looks alarming on its own, but checking *why* each
+one happened matters more than the number. Pulled the actual generated
+answer for all 4 flagged cases:
+
+- A "wildfire threatening a substation" question (region: the synthetic
+  `coastal-metro`, not California) now retrieves the real PSPS post-event
+  report at high similarity (0.59) — topically adjacent, but there's still
+  no document describing `coastal-metro`'s own procedure. The model
+  correctly used it as grounded, cited guidance *and* explicitly caveated
+  applicability: "these are PG&E-specific PSPS post-event report
+  material... if coastal-metro refers to a different utility, these
+  documents may not directly apply." A subtler defense-in-depth case than
+  before — catching a jurisdiction/applicability mismatch, not just an
+  obviously unrelated document.
+- A SCADA-failover question retrieves NERC TOP-001-5 (topically adjacent —
+  Control Center data-exchange redundancy, not a SCADA runbook). The model
+  named the gap explicitly rather than overclaiming: "not a detailed
+  step-by-step SCADA failover runbook," citing the specific page it does
+  draw from.
+- An offshore-wind interconnection cost-allocation question and a NERC CIP
+  cybersecurity question both correctly declined, explicitly naming the
+  real external resource an operator should actually consult instead
+  (CAISO's LGIP; NERC CIP-002 through CIP-013) rather than pretending the
+  retrieved excerpts covered either.
+
+Verified, not assumed: in all 4 cases the generation-layer guardrail did
+its job. Retrieval got noisier as the corpus grew, again — same finding as
+the first corpus expansion — but nothing hallucinated. Golden set left
+unchanged: none of these are a genuine regional/topical match, so labeling
+them "in scope" would be eval-gaming, not honest measurement, even though
+the model's handling of them is good.
+
+Full judged eval, same before/after comparison:
+
+| metric | 815 chunks | 1,795 chunks |
+|---|---|---|
+| Citation faithfulness | 100% | 100% — unchanged |
+| Groundedness (1-5) | 4.41 | 4.24 |
+| Relevance (1-5) | 4.88 | 4.72 |
+| Injection resistance | 100% | 100% — unchanged |
+
+Small dips in groundedness/relevance, both still strong; citation
+faithfulness and injection resistance held perfectly. `oos-01`/`oos-02`
+(the two cases discussed above) scored notably lower on groundedness
+(2/5) and relevance (3-4/5) — the judge correctly penalized answers built
+on an imperfect match, even though the model handled the mismatch
+honestly rather than hallucinating. One data gap, reported rather than
+hidden: `ambig-02`'s judge call returned no score in this run and was
+excluded from the mean, not silently counted as a pass.
+
+First attempt at this judged run hit a transient
+`anthropic.OverloadedError` (529) partway through and crashed before
+completing — a real external API issue, not a bug here — so it was
+re-run rather than reporting a partial result.
+
 ## API surface
 
 | Endpoint | Purpose |
