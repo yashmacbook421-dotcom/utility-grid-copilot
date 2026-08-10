@@ -13,6 +13,16 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:3000"
     surge_check_interval_seconds: int = 60
     slack_webhook_url: str = ""
+    twilio_account_sid: str = ""
+    twilio_auth_token: str = ""
+    twilio_from_number: str = ""
+    twilio_to_number: str = ""
+    # Keep authentication off for the self-contained local demo.  Any
+    # internet-reachable deployment must set AUTH_REQUIRED=true and provide
+    # both keys through its secret manager.
+    auth_required: bool = False
+    operator_api_key: str = ""
+    admin_api_key: str = ""
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 

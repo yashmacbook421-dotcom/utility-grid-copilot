@@ -33,6 +33,11 @@ account and the API budget, not something to do silently.
 4. **Secrets**: `ANTHROPIC_API_KEY` becomes a platform secret (Fly.io
    `fly secrets set`, Render environment group, GitHub Actions secret for
    CI) instead of a local `.env` file — never commit it.
+   Set `AUTH_REQUIRED=true` and provide distinct, long random
+   `OPERATOR_API_KEY` and `ADMIN_API_KEY` secrets as well. Send keys only in
+   the `X-API-Key` request header from a trusted operator-facing proxy or
+   authenticated server-side layer; do not put either key in a
+   `NEXT_PUBLIC_*` browser variable.
 5. **Document ingestion**: startup self-seeds the synthetic procedures
    automatically, but the real document corpus (NERC/CAISO/FERC/CPUC) is a
    separate, explicit step — it downloads several MB of PDFs and runs local
@@ -71,4 +76,7 @@ process:
 | `EMBEDDING_MODEL` | `backend/app/config.py` | Local model, no key needed, but changing it means re-embedding every `document_chunks` row |
 | `EIA_API_KEY` | `backend/app/config.py` | Free (eia.gov/opendata/register.php). Without it, the real California demand region is skipped, not an error |
 | `SLACK_WEBHOOK_URL` | `backend/app/config.py` | Without it, surge-watcher notifications are a silent no-op, not an error |
+| `AUTH_REQUIRED` | `backend/app/config.py` | Set to `true` for every non-local deployment |
+| `OPERATOR_API_KEY` | `backend/app/config.py` | Grants recommendation, monitoring, feedback, what-if, and surge-review access |
+| `ADMIN_API_KEY` | `backend/app/config.py` | Includes operator access and is required for document-ingestion endpoints |
 | `NEXT_PUBLIC_API_BASE_URL` | frontend build | Must point at the deployed backend's public URL |

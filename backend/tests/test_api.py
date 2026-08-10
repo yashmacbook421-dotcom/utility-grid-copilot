@@ -4,6 +4,7 @@ the underlying service functions.
 
 from sqlalchemy import delete
 
+from app.config import get_settings
 from app.models import Document, DocumentChunk
 
 
@@ -69,6 +70,56 @@ def test_ingest_raw_text_document_round_trip(client, db):
 def test_ingest_directory_404_for_missing_directory(client):
     response = client.post(
         "/api/ingest/directory",
-        json={"directory_path": "/no/such/directory", "organization": "test", "document_type": "test"},
+        json={"directory_path": "knowledge_base/does-not-exist", "organization": "test", "document_type": "test"},
     )
     assert response.status_code == 404
+
+
+def test_ingest_directory_rejects_paths_outside_the_managed_corpus(client):
+    response = client.post(
+        "/api/ingest/directory",
+        json={"directory_path": "/tmp", "organization": "test", "document_type": "test"},
+    )
+    assert response.status_code == 403
+
+
+def test_ingest_pdf_rejects_non_pdf_upload(client):
+    response = client.post(
+        "/api/ingest/pdf",
+        data={
+            "title": "Not a PDF",
+            "organization": "test",
+            "document_type": "test",
+            "source_url": "https://example.invalid/not-a-pdf",
+        },
+        files={"file": ("notes.txt", b"not a PDF", "text/plain")},
+    )
+    assert response.status_code == 415
+
+
+def test_auth_required_rejects_missing_or_invalid_api_key(client, monkeypatch):
+    settings = get_settings()
+    monkeypatch.setattr(settings, "auth_required", True)
+    monkeypatch.setattr(settings, "operator_api_key", "operator-test-key")
+    monkeypatch.setattr(settings, "admin_api_key", "admin-test-key")
+
+    assert client.get("/api/observability/requests").status_code == 401
+    assert client.get("/api/observability/requests", headers={"X-API-Key": "wrong"}).status_code == 401
+    assert client.get("/api/observability/requests", headers={"X-API-Key": "operator-test-key"}).status_code == 200
+
+
+def test_auth_roles_restrict_ingestion_to_admin(client, db, monkeypatch):
+    settings = get_settings()
+    monkeypatch.setattr(settings, "auth_required", True)
+    monkeypatch.setattr(settings, "operator_api_key", "operator-test-key")
+    monkeypatch.setattr(settings, "admin_api_key", "admin-test-key")
+    payload = {"source": "test.md", "title": "[test] Role Test Fixture", "content": "A test document."}
+
+    assert client.post("/api/ingest/documents", json=payload, headers={"X-API-Key": "operator-test-key"}).status_code == 403
+    assert client.post("/api/ingest/documents", json=payload, headers={"X-API-Key": "admin-test-key"}).status_code == 200
+
+    doc = db.query(Document).filter(Document.title == payload["title"]).first()
+    assert doc is not None
+    db.execute(delete(DocumentChunk).where(DocumentChunk.document_id == doc.id))
+    db.execute(delete(Document).where(Document.id == doc.id))
+    db.commit()

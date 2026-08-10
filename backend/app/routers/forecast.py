@@ -7,6 +7,7 @@ from app.data.generate_synthetic_data import REGION_PROFILES
 from app.db import get_db
 from app.schemas import ForecastResponse, WhatIfRequest, WhatIfResponse
 from app.services import forecasting, rag, surge_watcher
+from app.services.auth import Principal, require_operator
 
 router = APIRouter(prefix="/api/forecast", tags=["forecast"])
 
@@ -39,7 +40,9 @@ def list_regions():
 
 
 @router.post("/whatif", response_model=WhatIfResponse)
-def whatif_forecast(payload: WhatIfRequest, db: Session = Depends(get_db)):
+def whatif_forecast(
+    payload: WhatIfRequest, db: Session = Depends(get_db), _: Principal = Depends(require_operator)
+):
     """"What if demand is X% higher" — scales the existing trained model's
     forecast (forecasting.forecast_whatif), then reuses the same surge
     threshold + RAG-grounded-explanation pattern as the background

@@ -10,6 +10,7 @@ from app.data.generate_synthetic_data import REGION_PROFILES
 from app.db import get_db
 from app.schemas import AgenticRecommendationResponse, RecommendationRequest, RecommendationResponse, ToolCallSummary
 from app.services import agentic, cache, forecasting, observability, rag, rate_limiter
+from app.services.auth import Principal, require_operator
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +26,12 @@ _client: Anthropic | None = (
 
 
 @router.post("", response_model=RecommendationResponse)
-def recommend(payload: RecommendationRequest, request: Request, db: Session = Depends(get_db)):
+def recommend(
+    payload: RecommendationRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    _: Principal = Depends(require_operator),
+):
     rate_limiter.enforce(request)
 
     cache_key = cache.make_key(
@@ -160,7 +166,12 @@ def recommend(payload: RecommendationRequest, request: Request, db: Session = De
 
 
 @router.post("/agentic", response_model=AgenticRecommendationResponse)
-def recommend_agentic(payload: RecommendationRequest, request: Request, db: Session = Depends(get_db)):
+def recommend_agentic(
+    payload: RecommendationRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    _: Principal = Depends(require_operator),
+):
     """Same job as POST /api/recommend, but Claude decides for itself whether to
     search procedures and/or fetch a forecast, instead of both being pre-fetched.
     Not cached — the point is to see its tool-choice behavior on every call.

@@ -5,12 +5,13 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.models import AnswerFeedback, RequestLog
 from app.schemas import FeedbackRequest, FeedbackResponse, FeedbackSummaryResponse
+from app.services.auth import Principal, require_operator
 
 router = APIRouter(prefix="/api/feedback", tags=["feedback"])
 
 
 @router.post("", response_model=FeedbackResponse)
-def submit_feedback(payload: FeedbackRequest, db: Session = Depends(get_db)):
+def submit_feedback(payload: FeedbackRequest, db: Session = Depends(get_db), _: Principal = Depends(require_operator)):
     if db.get(RequestLog, payload.request_log_id) is None:
         raise HTTPException(status_code=404, detail=f"No request with id '{payload.request_log_id}'.")
 
@@ -27,7 +28,7 @@ def submit_feedback(payload: FeedbackRequest, db: Session = Depends(get_db)):
 
 
 @router.get("/summary", response_model=FeedbackSummaryResponse)
-def feedback_summary(db: Session = Depends(get_db)):
+def feedback_summary(db: Session = Depends(get_db), _: Principal = Depends(require_operator)):
     rows = db.execute(select(AnswerFeedback.rating, AnswerFeedback.reason)).all()
 
     up = sum(1 for rating, _ in rows if rating == "up")

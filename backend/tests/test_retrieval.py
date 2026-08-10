@@ -5,6 +5,22 @@
 from app.services import rag
 
 
+def test_chunk_text_bounds_oversized_single_paragraph_and_preserves_overlap():
+    text = " ".join(f"word{i}" for i in range(500))
+    chunks = rag.chunk_text(text, chunk_size=120, overlap=20)
+
+    assert len(chunks) > 1
+    assert all(len(chunk) <= 120 for chunk in chunks)
+    assert chunks[0][-20:] in chunks[1]
+
+
+def test_chunk_text_rejects_invalid_overlap():
+    import pytest
+
+    with pytest.raises(ValueError, match="smaller than chunk_size"):
+        rag.chunk_text("some text", chunk_size=100, overlap=100)
+
+
 def test_retrieve_finds_the_right_synthetic_document(db):
     sources = rag.retrieve(db, "How should we handle tonight's peak?", top_k=4)
     assert any(s.title == "Peak Demand Response" for s in sources)

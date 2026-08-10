@@ -20,30 +20,50 @@ _CHUNK_OVERLAP_CHARS = 150
 
 
 def chunk_text(text: str, chunk_size: int = _CHUNK_SIZE_CHARS, overlap: int = _CHUNK_OVERLAP_CHARS) -> list[str]:
-    paragraphs = [p.strip() for p in re.split(r"\n\s*\n", text) if p.strip()]
+    """Split text into bounded, overlapping chunks without losing text.
+
+    PDFs often extract a whole page as one paragraph.  Paragraph-only
+    chunking therefore created arbitrarily large chunks for exactly the
+    documents this pipeline is meant to ingest.  This sliding-window splitter
+    prefers a whitespace boundary, but falls back to a hard boundary for an
+    unusually long token.  The next window starts ``overlap`` characters
+    before the previous one ended, so continuity is real rather than a
+    self-duplicated paragraph tail.
+    """
+    if chunk_size <= 0:
+        raise ValueError("chunk_size must be greater than zero")
+    if overlap < 0 or overlap >= chunk_size:
+        raise ValueError("overlap must be non-negative and smaller than chunk_size")
+
+    text = text.strip()
+    if not text:
+        return []
+
     chunks: list[str] = []
-    buffer = ""
+    start = 0
+    text_length = len(text)
 
-    for para in paragraphs:
-        if len(buffer) + len(para) + 1 <= chunk_size:
-            buffer = f"{buffer}\n\n{para}".strip()
-            continue
+    while start < text_length:
+        end = min(start + chunk_size, text_length)
+        if end < text_length:
+            # Prefer ending at the last whitespace in the window.  If a
+            # token itself exceeds chunk_size, use the hard limit instead.
+            boundary = max(text.rfind(" ", start + 1, end), text.rfind("\n", start + 1, end))
+            if boundary > start:
+                # Keep the whitespace out of the preceding raw window.
+                # `strip()` below would remove it anyway, and retaining it
+                # here would make the visible overlap one character shorter.
+                end = boundary
 
-        # Overlap carries a tail of the chunk just flushed into the next one,
-        # for context continuity across the boundary. Bug fixed here: this
-        # used to take `para[-overlap:]` — the tail of the *new*, oversized
-        # paragraph prepended to itself — a meaningless self-duplication
-        # rather than actual overlap with prior content. Never triggered on
-        # the small synthetic docs (whose paragraphs are always well under
-        # chunk_size), but real PDF pages routinely extract as one long
-        # paragraph exceeding it — caught by a real pytest run, not assumed.
-        prior_tail = buffer[-overlap:] if buffer else ""
-        if buffer:
-            chunks.append(buffer)
-        buffer = f"{prior_tail}\n\n{para}".strip() if prior_tail else para
+        chunk = text[start:end].strip()
+        if chunk:
+            chunks.append(chunk)
+        if end >= text_length:
+            break
 
-    if buffer:
-        chunks.append(buffer)
+        # `end` always advances beyond `start`; the validation above ensures
+        # the overlap cannot turn this into an infinite loop.
+        start = max(start + 1, end - overlap)
 
     return chunks
 

@@ -53,7 +53,14 @@ def _has_pending_event(db: Session, region: str) -> bool:
     return db.execute(stmt).first() is not None
 
 
-def check_region_for_surge(db: Session, region: str, region_profile: dict) -> SurgeEvent | None:
+def check_region_for_surge(db: Session, region: str, region_profile: dict, force: bool = False) -> SurgeEvent | None:
+    """`force=True` skips the peak-vs-baseline threshold check (used only by
+    the demo-trigger endpoint, routers/surges.py, to produce a real event —
+    real retrieval, real Claude call, real notification — on demand for a
+    live demo, rather than waiting for an actual forecast to cross the
+    threshold naturally). The pending-event guard still applies either way,
+    so triggering twice in a row is a no-op, not a duplicate event.
+    """
     if _has_pending_event(db, region):
         return None
 
@@ -69,7 +76,7 @@ def check_region_for_surge(db: Session, region: str, region_profile: dict) -> Su
     baseline_p95 = float(history["demand_mw"].quantile(0.95))
     peak = forecast_data["peak_forecast_mw"]
 
-    if peak < baseline_p95 * _SURGE_THRESHOLD_RATIO:
+    if not force and peak < baseline_p95 * _SURGE_THRESHOLD_RATIO:
         return None
 
     question = (
@@ -119,14 +126,19 @@ def check_region_for_surge(db: Session, region: str, region_profile: dict) -> Su
     db.refresh(event)
     logger.info("Surge event created for %s: forecast %.0f MW vs p95 %.0f MW (severity=%s)", region, peak, baseline_p95, severity)
 
-    notified, notification_error = notify.notify_slack(
+    slack_sent, slack_error = notify.notify_slack(
         f":rotating_light: *[{severity.upper()}] Demand surge forecast for {region}*\n"
         f"Peak {peak:.0f} MW at {forecast_data['peak_forecast_time']} "
         f"(normal high end ~{baseline_p95:.0f} MW). A recommendation is waiting for approval "
         f"in the Grid Copilot dashboard."
     )
-    event.notified = notified
-    event.notification_error = notification_error
+    sms_sent, sms_error = notify.notify_sms(
+        f"[Grid Copilot] {severity.upper()} surge forecast for {region}: "
+        f"{peak:.0f} MW (normal high end ~{baseline_p95:.0f} MW). "
+        f"Recommendation waiting for your approval in the dashboard."
+    )
+    event.notified = slack_sent or sms_sent
+    event.notification_error = None if event.notified else "; ".join(e for e in (slack_error, sms_error) if e) or None
     db.commit()
     db.refresh(event)
     return event

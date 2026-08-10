@@ -1,6 +1,7 @@
 import glob
 import os
 import uuid
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
@@ -17,6 +18,7 @@ from app.schemas import (
     PdfIngestResponse,
 )
 from app.services import pdf_ingest, rag
+from app.services.auth import Principal, require_admin
 
 router = APIRouter(prefix="/api/ingest", tags=["ingest"])
 rag_router = APIRouter(prefix="/api/rag", tags=["rag"])
@@ -26,6 +28,9 @@ rag_router = APIRouter(prefix="/api/rag", tags=["rag"])
 # from download_manifest.py) — keeps "documents we sourced and vetted" and
 # "documents someone uploaded through the API" visibly distinct on disk.
 _UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "knowledge_base", "uploads")
+_KNOWLEDGE_BASE_DIR = Path(os.path.dirname(_UPLOAD_DIR)).resolve()
+_MAX_UPLOAD_BYTES = 25 * 1024 * 1024
+_UPLOAD_CHUNK_BYTES = 1024 * 1024
 
 
 class IngestDocumentRequest(BaseModel):
@@ -34,8 +39,56 @@ class IngestDocumentRequest(BaseModel):
     content: str
 
 
+def _is_within_knowledge_base(path: Path) -> bool:
+    """Only allow server-local ingestion from the managed corpus directory.
+
+    This endpoint is useful for a local operator dropping PDFs into the
+    project corpus, but must not become a remote arbitrary-file reader.
+    Resolving first also rejects a symlink that points outside that directory.
+    """
+    try:
+        path.resolve().relative_to(_KNOWLEDGE_BASE_DIR)
+        return True
+    except ValueError:
+        return False
+
+
+async def _save_uploaded_pdf(file: UploadFile) -> str:
+    """Stream, validate, and safely name an API-uploaded PDF."""
+    suffix = Path(file.filename or "").suffix.lower()
+    if suffix != ".pdf":
+        raise HTTPException(status_code=415, detail="Only .pdf uploads are supported.")
+
+    os.makedirs(_UPLOAD_DIR, exist_ok=True)
+    destination = Path(_UPLOAD_DIR) / f"{uuid.uuid4().hex}.pdf"
+    bytes_written = 0
+    first_chunk = True
+    try:
+        with destination.open("xb") as saved_file:
+            while data := await file.read(_UPLOAD_CHUNK_BYTES):
+                if first_chunk:
+                    first_chunk = False
+                    if not data.startswith(b"%PDF-"):
+                        raise HTTPException(status_code=415, detail="Uploaded file is not a valid PDF.")
+                bytes_written += len(data)
+                if bytes_written > _MAX_UPLOAD_BYTES:
+                    raise HTTPException(status_code=413, detail="PDF exceeds the 25 MB upload limit.")
+                saved_file.write(data)
+        if first_chunk:
+            raise HTTPException(status_code=422, detail="Uploaded PDF is empty.")
+    except Exception:
+        destination.unlink(missing_ok=True)
+        raise
+    finally:
+        await file.close()
+
+    return str(destination)
+
+
 @router.post("/documents", response_model=IngestDocumentsResponse)
-def ingest_document(payload: IngestDocumentRequest, db: Session = Depends(get_db)):
+def ingest_document(
+    payload: IngestDocumentRequest, db: Session = Depends(get_db), _: Principal = Depends(require_admin)
+):
     """Raw-text ingestion — unchanged from before the PDF pipeline existed,
     kept for backward compatibility (this is what seed.py's synthetic
     procedure docs go through).
@@ -63,11 +116,9 @@ async def ingest_pdf_upload(
     source_url: str = Form(...),
     region: str | None = Form(None),
     db: Session = Depends(get_db),
+    _: Principal = Depends(require_admin),
 ):
-    os.makedirs(_UPLOAD_DIR, exist_ok=True)
-    dest_path = os.path.join(_UPLOAD_DIR, file.filename)
-    with open(dest_path, "wb") as f:
-        f.write(await file.read())
+    dest_path = await _save_uploaded_pdf(file)
 
     run = pdf_ingest.ingest_pdf(
         db,
@@ -89,17 +140,22 @@ class IngestDirectoryRequest(BaseModel):
 
 
 @router.post("/directory", response_model=DirectoryIngestResponse)
-def ingest_directory(payload: IngestDirectoryRequest, db: Session = Depends(get_db)):
+def ingest_directory(
+    payload: IngestDirectoryRequest, db: Session = Depends(get_db), _: Principal = Depends(require_admin)
+):
     """Ingests every PDF in a server-local directory — the 'add documents
     without touching application code' path: drop PDFs in a folder, call
     this endpoint (or re-run knowledge_base/download_and_ingest.py for
     manifest-tracked documents).
     """
-    if not os.path.isdir(payload.directory_path):
+    directory = Path(payload.directory_path)
+    if not _is_within_knowledge_base(directory):
+        raise HTTPException(status_code=403, detail="Directory ingestion is limited to the managed knowledge_base directory.")
+    if not directory.is_dir():
         raise HTTPException(status_code=404, detail=f"No such directory: '{payload.directory_path}'.")
 
     results = []
-    for pdf_path in sorted(glob.glob(os.path.join(payload.directory_path, "*.pdf"))):
+    for pdf_path in sorted(glob.glob(os.path.join(str(directory.resolve()), "*.pdf"))):
         title = os.path.splitext(os.path.basename(pdf_path))[0].replace("-", " ").replace("_", " ").title()
         run = pdf_ingest.ingest_pdf(
             db,

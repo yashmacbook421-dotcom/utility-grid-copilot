@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.models import AnswerFeedback, RequestLog, SurgeEvent
 from app.schemas import MonitoringDashboardResponse
+from app.services.auth import Principal, require_operator
 
 router = APIRouter(prefix="/api/observability", tags=["observability"])
 
@@ -14,7 +15,9 @@ def _mean(values: list[float]) -> float | None:
 
 
 @router.get("/requests")
-def list_requests(limit: int = Query(default=20, ge=1, le=100), db: Session = Depends(get_db)):
+def list_requests(
+    limit: int = Query(default=20, ge=1, le=100), db: Session = Depends(get_db), _: Principal = Depends(require_operator)
+):
     stmt = select(RequestLog).order_by(RequestLog.created_at.desc()).limit(limit)
     rows = db.execute(stmt).scalars().all()
 
@@ -61,7 +64,9 @@ def list_requests(limit: int = Query(default=20, ge=1, le=100), db: Session = De
 
 
 @router.get("/dashboard", response_model=MonitoringDashboardResponse)
-def monitoring_dashboard(limit: int = Query(default=200, ge=1, le=2000), db: Session = Depends(get_db)):
+def monitoring_dashboard(
+    limit: int = Query(default=200, ge=1, le=2000), db: Session = Depends(get_db), _: Principal = Depends(require_operator)
+):
     """Real, per-request/per-event numbers only — deliberately does not
     include eval-only metrics like recall@k or citation accuracy, which
     require a golden set with known-correct answers that live queries
