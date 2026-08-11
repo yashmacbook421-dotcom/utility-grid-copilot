@@ -9,7 +9,7 @@ which is what makes the output usable for grid-balancing decisions.
 
 import math
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import numpy as np
 import pandas as pd
@@ -111,8 +111,17 @@ def forecast(db: Session, region: str, region_profile: dict, horizon_hours: int 
 
     models = get_or_train_models(region, history)
 
-    last_time = history["time"].max()
-    future_times = pd.date_range(start=last_time + timedelta(hours=1), periods=horizon_hours, freq="h")
+    # Anchored to real current time, not the last stored reading. The
+    # model's features are all cyclical (hour/day-of-week/month + estimated
+    # temperature, no absolute dates), so it generalizes correctly to real
+    # future dates even when the underlying training data has gone stale —
+    # but only if we actually ask it to. Using history["time"].max() here
+    # used to mean "24 hours forward from whenever the data was last
+    # ingested," which quietly drifted into the past as the ingested data
+    # aged without a refresh job — a real bug, not a display issue: it
+    # produced an internally-consistent forecast for the wrong dates.
+    now = pd.Timestamp(datetime.now(timezone.utc)).floor("h")
+    future_times = pd.date_range(start=now + timedelta(hours=1), periods=horizon_hours, freq="h")
 
     has_temperature = region_profile.get("has_temperature", True)
     future_df = pd.DataFrame(

@@ -9,7 +9,7 @@ from app.data import seed
 from app.db import SessionLocal
 from app.init_db import init_db
 from app.routers import dashboard, feedback, forecast, ingest, observability, recommend, surges
-from app.services import surge_watcher
+from app.services import data_refresh, surge_watcher
 
 logging.basicConfig(level=logging.INFO)
 
@@ -52,6 +52,19 @@ async def _surge_watcher_loop():
             logger.exception("Surge watcher loop iteration failed, will retry next interval")
 
 
+async def _data_refresh_loop():
+    while True:
+        try:
+            db = SessionLocal()
+            try:
+                await asyncio.to_thread(data_refresh.refresh_all, db)
+            finally:
+                db.close()
+        except Exception:
+            logger.exception("Data refresh loop iteration failed, will retry next interval")
+        await asyncio.sleep(settings.data_refresh_interval_seconds)
+
+
 @app.on_event("startup")
 def on_startup():
     init_db()
@@ -60,6 +73,8 @@ def on_startup():
     seed.seed_procedures()
     asyncio.create_task(_surge_watcher_loop())
     logger.info("Surge watcher background loop started (interval=%ss)", settings.surge_check_interval_seconds)
+    asyncio.create_task(_data_refresh_loop())
+    logger.info("Data refresh background loop started (interval=%ss)", settings.data_refresh_interval_seconds)
 
 
 @app.get("/health")

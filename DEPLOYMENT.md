@@ -81,6 +81,7 @@ process:
 | `EMBEDDING_MODEL` | `backend/app/config.py` | Local model, no key needed, but changing it means re-embedding every `document_chunks` row |
 | `EIA_API_KEY` | `backend/app/config.py` | Free (eia.gov/opendata/register.php). Without it, the real California demand region is skipped, not an error |
 | `SLACK_WEBHOOK_URL` | `backend/app/config.py` | Without it, surge-watcher notifications are a silent no-op, not an error |
+| `DATA_REFRESH_INTERVAL_SECONDS` | `backend/app/config.py` | Default 3600 (hourly). Keeps `demand_readings` current for all 4 regions — see `app/services/data_refresh.py` |
 | `DAILY_SPEND_CAP_USD` | `backend/app/config.py` | Real enforced ceiling on daily Claude spend, default $5.00; 0 or negative disables it — see `app/services/budget.py` |
 | `AUTH_REQUIRED` | `backend/app/config.py` | Set to `true` for every non-local deployment |
 | `OPERATOR_API_KEY` | `backend/app/config.py` | Grants recommendation, monitoring, feedback, what-if, and surge-review access |

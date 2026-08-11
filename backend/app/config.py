@@ -12,6 +12,10 @@ class Settings(BaseSettings):
     embedding_dim: int = 384
     cors_origins: str = "http://localhost:3000"
     surge_check_interval_seconds: int = 60
+    # How often demand_readings catches up to real "now" for all 4 regions
+    # (data_refresh.py). Matches EIA's own hourly reporting granularity —
+    # refreshing more often than the real data changes buys nothing.
+    data_refresh_interval_seconds: int = 3600
     # A real, enforced ceiling on Claude spend, not just an observability
     # number — every endpoint that calls Claude checks this first. 0 or
     # negative disables the cap (unbounded), matching how AUTH_REQUIRED

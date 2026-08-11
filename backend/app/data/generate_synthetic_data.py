@@ -49,7 +49,13 @@ def _ev_shape(hour: float) -> float:
 
 def generate_region(region: str, start: datetime, days: int) -> pd.DataFrame:
     profile = REGION_PROFILES[region]
-    timestamps = pd.date_range(start=start, periods=days * 24, freq="h", tz=timezone.utc)
+    # `tz=` is only safe to pass alongside a naive `start` — a tz-aware
+    # `start` (e.g. a timestamp read back from Postgres, as data_refresh.py
+    # passes) trips a pandas assertion ("Inferred time zone not equal to
+    # passed time zone") even when both sides are really UTC, since the
+    # tzinfo objects aren't necessarily identical instances.
+    tz_kwarg = {} if start.tzinfo is not None else {"tz": timezone.utc}
+    timestamps = pd.date_range(start=start, periods=days * 24, freq="h", **tz_kwarg)
 
     rows = []
     for ts in timestamps:

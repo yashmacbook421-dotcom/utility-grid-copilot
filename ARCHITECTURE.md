@@ -48,6 +48,21 @@ flowchart LR
   source (a deliberate scope decision, not a gap — see the table below).
 - **Slack webhook** — `app/services/notify.py`, best-effort: a failed
   notification never blocks surge detection, it's a convenience channel.
+- **Background data-refresh loop** — `app/services/data_refresh.py`, a
+  second `asyncio` loop alongside the surge-watcher's (`main.py`), default
+  hourly (`DATA_REFRESH_INTERVAL_SECONDS`, matches EIA's own reporting
+  granularity). Fixes a real gap found in production use, not a
+  hypothetical: `demand_readings` was seeded once and never updated again,
+  so an operator opening the app weeks later saw a forecast computed from
+  data that had quietly gone stale — internally consistent, wrong dates.
+  Two distinct refresh mechanisms, because "current" means something
+  different per region type: California re-pulls whatever new real EIA
+  hours exist since the last one stored; the three synthetic regions
+  extend the same generator (`generate_synthetic_data.py`) forward to
+  cover the gap. Both insert only rows strictly after what's already
+  stored, so the loop is idempotent regardless of how long a gap it's
+  catching up — safe to call hourly or after being down for a week.
+  Runs once immediately at startup (catch-up), then on the interval.
 
 ## Document ingestion pipeline
 
@@ -233,6 +248,7 @@ no signal — closed by wrapping each iteration in try/except).
 | Rate limiting / caching | In-process (dict + lock), not Redis | Correct for a single backend instance, which is what's actually running. Documented as the first thing to change if this became multi-instance (see below) rather than pre-building for a scale that doesn't exist yet. |
 | Observability | Structured rows in Postgres (`request_logs`), not an external APM | Same reasoning as the vector store: no new infrastructure piece for a single-service demo. Captures per-stage latency, token usage, estimated cost, and retrieval results per request — queryable via `GET /api/observability/requests`. |
 | California region's missing temperature | `temperature_c` made nullable; forecasting skips temperature projection for this region rather than faking a value | EIA's demand endpoint has no weather data, and wiring up a second external API (weather) was out of scope for what was asked. `HistGradientBoostingRegressor` natively handles NaN features, so the model still trains/predicts correctly — an honest, explainable limitation, not a hidden gap. |
+| Forecast anchor point | Real current time (`datetime.now(timezone.utc)`), not the last stored reading's timestamp | Found live, not hypothetical: `forecast()` used to compute "24 hours ahead" from `history["time"].max()` — internally consistent, but silently drifted into the past as `demand_readings` aged without a refresh job, so "tonight's peak" was actually late July dressed up to look current. The model's features are all cyclical (hour/day-of-week/month + estimated temperature, no absolute dates), so anchoring to real "now" instead was a correct fix, not a workaround — paired with the background data-refresh loop above so the training data itself doesn't go stale either. |
 | Sparse retrieval query construction | Query lexemes OR'd together (`to_tsquery` built from `tsvector_to_array`), not `plainto_tsquery`'s default AND | Found live: `plainto_tsquery` ANDs every term, so a single filler word in a natural-language question ("tonight," absent from every procedure doc) zeroed out the match against *every* document — 0% recall until fixed. |
 | Sparse/hybrid relevance floor | **None** — a measured, accepted limitation, not fixed with an arbitrary threshold | Tried one; it doesn't work here. An out-of-scope "wildfire near a substation" question scores the same top raw `ts_rank_cd` (0.4) as a genuine in-scope match, because every procedure doc shares boilerplate vocabulary ("procedure," "region") that isn't down-weighted enough to reject it. Dense correctly rejects out-of-scope questions (0% false-positive rate); sparse/hybrid don't (100%) — a real, reported tradeoff, not swept under the rug. See the comparison results below. |
 | Backend Docker image | Explicit CPU-only torch install (`--index-url https://download.pytorch.org/whl/cpu`), before installing `requirements.txt` | `sentence-transformers` pulls the full CUDA-enabled torch build by default — 914MB of torch plus 2.9GB of unused NVIDIA libraries, found while sizing the image for Render's 512MB free tier. CPU-only cuts this to what a CPU-only container actually needs. |
