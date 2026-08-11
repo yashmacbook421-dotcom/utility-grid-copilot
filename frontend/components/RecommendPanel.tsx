@@ -2,18 +2,21 @@
 
 import { useState } from "react";
 import ReactMarkdown from "react-markdown";
-import { getRecommendation, submitFeedback } from "@/lib/api";
-import { RecommendationResponse } from "@/lib/types";
+import { getAgenticRecommendation, getRecommendation, submitFeedback } from "@/lib/api";
+import { AgenticRecommendationResponse, RecommendationResponse } from "@/lib/types";
 import SourceCard from "@/components/SourceCard";
 import { splitBottomLine } from "@/lib/answerFormat";
 
 const DOWN_REASONS = ["Wrong information", "Poor source", "Missing information", "Irrelevant answer", "Other"];
 
+type Mode = "deterministic" | "agentic";
+
 export default function RecommendPanel({ region }: { region: string }) {
   const [question, setQuestion] = useState("");
+  const [mode, setMode] = useState<Mode>("deterministic");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<RecommendationResponse | null>(null);
+  const [result, setResult] = useState<RecommendationResponse | AgenticRecommendationResponse | null>(null);
   const [feedbackGiven, setFeedbackGiven] = useState<"up" | "down" | null>(null);
   const [showDownReasons, setShowDownReasons] = useState(false);
 
@@ -25,7 +28,10 @@ export default function RecommendPanel({ region }: { region: string }) {
     setFeedbackGiven(null);
     setShowDownReasons(false);
     try {
-      const res = await getRecommendation(region, question.trim());
+      const res =
+        mode === "agentic"
+          ? await getAgenticRecommendation(region, question.trim())
+          : await getRecommendation(region, question.trim());
       setResult(res);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to get a recommendation.");
@@ -53,6 +59,30 @@ export default function RecommendPanel({ region }: { region: string }) {
     <div className="card">
       <p className="step-label">Step 2 · Ask your question</p>
       <p className="card-subtitle">e.g. &ldquo;How should we handle tonight&rsquo;s peak?&rdquo;</p>
+
+      <div className="mode-toggle" role="radiogroup" aria-label="Recommendation mode">
+        <button
+          type="button"
+          className={`mode-toggle-button${mode === "deterministic" ? " mode-toggle-active" : ""}`}
+          onClick={() => setMode("deterministic")}
+          aria-pressed={mode === "deterministic"}
+        >
+          Deterministic
+        </button>
+        <button
+          type="button"
+          className={`mode-toggle-button${mode === "agentic" ? " mode-toggle-active" : ""}`}
+          onClick={() => setMode("agentic")}
+          aria-pressed={mode === "agentic"}
+        >
+          Agentic (Claude picks its own tools)
+        </button>
+      </div>
+      <p className="mode-toggle-hint">
+        {mode === "agentic"
+          ? "Claude decides for itself whether to search procedures and/or check the forecast, and how many times — usually slower and costlier, shown here to demonstrate the tradeoff."
+          : "Retrieval and forecast are always both fetched first, then one Claude call — predictable cost and latency."}
+      </p>
 
       <form className="recommend-form" onSubmit={handleSubmit}>
         <input
@@ -115,6 +145,30 @@ export default function RecommendPanel({ region }: { region: string }) {
               </div>
             );
           })()}
+
+          {"tool_calls" in result && (
+            <details className="details-toggle">
+              <summary>
+                Show tool-use trace ({result.tool_calls.length} call{result.tool_calls.length === 1 ? "" : "s"},{" "}
+                {result.iterations} iteration{result.iterations === 1 ? "" : "s"})
+              </summary>
+              <div className="details-body">
+                {result.tool_calls.length === 0 ? (
+                  <p className="empty-state">Claude answered without calling any tools.</p>
+                ) : (
+                  <ol className="tool-call-trace">
+                    {result.tool_calls.map((call, i) => (
+                      <li key={i}>
+                        <span className="tool-call-name">{call.tool}</span>
+                        <code className="tool-call-input">{JSON.stringify(call.input)}</code>
+                        <span className="tool-call-summary">{call.summary}</span>
+                      </li>
+                    ))}
+                  </ol>
+                )}
+              </div>
+            </details>
+          )}
 
           {result.sources.length > 0 && (
             <details className="details-toggle">

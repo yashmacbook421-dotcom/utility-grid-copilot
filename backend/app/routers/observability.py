@@ -2,9 +2,11 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.config import get_settings
 from app.db import get_db
 from app.models import AnswerFeedback, RequestLog, SurgeEvent
 from app.schemas import MonitoringDashboardResponse
+from app.services import budget
 from app.services.auth import Principal, require_operator
 
 router = APIRouter(prefix="/api/observability", tags=["observability"])
@@ -106,4 +108,12 @@ def monitoring_dashboard(
         "down": sum(1 for r in feedback_rows if r == "down"),
     }
 
-    return MonitoringDashboardResponse(rag=rag_stats, alerts=alerts_stats, feedback=feedback_stats)
+    cap = get_settings().daily_spend_cap_usd
+    spent_today = budget.today_spend_usd(db)
+    budget_stats = {
+        "daily_cap_usd": cap if cap > 0 else None,
+        "spent_today_usd": round(spent_today, 4),
+        "over_cap": budget.is_over_budget(db),
+    }
+
+    return MonitoringDashboardResponse(rag=rag_stats, alerts=alerts_stats, feedback=feedback_stats, budget=budget_stats)

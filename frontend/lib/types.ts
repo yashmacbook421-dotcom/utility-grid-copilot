@@ -44,6 +44,24 @@ export interface RecommendationResponse {
   request_log_id: string | null;
 }
 
+export interface ToolCallSummary {
+  tool: string;
+  input: Record<string, unknown>;
+  summary: string;
+}
+
+export interface AgenticRecommendationResponse {
+  region: string;
+  question: string;
+  answer: string;
+  tool_calls: ToolCallSummary[];
+  sources: SourceCitation[];
+  forecast_context: ForecastResponse | null;
+  warnings: string[];
+  iterations: number;
+  request_log_id: string | null;
+}
+
 export interface SurgeEvent {
   id: string;
   created_at: string;
@@ -106,6 +124,11 @@ export interface MonitoringDashboard {
     total: number;
     up: number;
     down: number;
+  };
+  budget: {
+    daily_cap_usd: number | null;
+    spent_today_usd: number;
+    over_cap: boolean;
   };
 }
 

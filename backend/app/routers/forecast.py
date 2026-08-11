@@ -6,7 +6,7 @@ from app.config import get_settings
 from app.data.generate_synthetic_data import REGION_PROFILES
 from app.db import get_db
 from app.schemas import ForecastResponse, WhatIfRequest, WhatIfResponse
-from app.services import forecasting, rag, surge_watcher
+from app.services import budget, forecasting, rag, surge_watcher
 from app.services.auth import Principal, require_operator
 
 router = APIRouter(prefix="/api/forecast", tags=["forecast"])
@@ -67,7 +67,7 @@ def whatif_forecast(
 
     explanation = None
     sources = []
-    if would_exceed and _client is not None:
+    if would_exceed and _client is not None and not budget.is_over_budget(db):
         question = (
             f"A what-if scenario projects demand up to {result['peak_forecast_mw']:.0f} MW at "
             f"{result['peak_forecast_time']} for {payload.region} (a {payload.demand_multiplier}x demand "

@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { ReactNode, useEffect, useState } from "react";
 import { getMonitoringDashboard } from "@/lib/api";
 import { MonitoringDashboard as MonitoringDashboardData } from "@/lib/types";
 
 const POLL_INTERVAL_MS = 30_000;
 
-function StatRow({ label, value }: { label: string; value: string | number }) {
+function StatRow({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div className="stat-row-item">
       <span className="stat-row-label">{label}</span>
@@ -82,6 +82,24 @@ export default function MonitoringDashboard() {
           <StatRow label="Total ratings" value={data.feedback.total} />
           <StatRow label="👍 Helpful" value={data.feedback.up} />
           <StatRow label="👎 Not helpful" value={data.feedback.down} />
+        </div>
+
+        <div className="card">
+          <p className="card-title">Budget</p>
+          <StatRow label="Daily cap" value={data.budget.daily_cap_usd != null ? `$${data.budget.daily_cap_usd.toFixed(2)}` : "Uncapped"} />
+          <StatRow label="Spent today" value={`$${data.budget.spent_today_usd.toFixed(4)}`} />
+          <StatRow
+            label="Status"
+            value={
+              data.budget.over_cap ? (
+                <span className="severity-badge severity-high">Cap reached — AI calls blocked</span>
+              ) : (
+                <span className="severity-badge severity-medium" style={{ color: "var(--status-good)" }}>
+                  Under cap
+                </span>
+              )
+            }
+          />
         </div>
       </div>
     </div>

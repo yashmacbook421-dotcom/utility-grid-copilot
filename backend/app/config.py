@@ -12,6 +12,11 @@ class Settings(BaseSettings):
     embedding_dim: int = 384
     cors_origins: str = "http://localhost:3000"
     surge_check_interval_seconds: int = 60
+    # A real, enforced ceiling on Claude spend, not just an observability
+    # number — every endpoint that calls Claude checks this first. 0 or
+    # negative disables the cap (unbounded), matching how AUTH_REQUIRED
+    # defaults off for local dev; a public deployment should set a real value.
+    daily_spend_cap_usd: float = 5.00
     slack_webhook_url: str = ""
     twilio_account_sid: str = ""
     twilio_auth_token: str = ""

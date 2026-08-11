@@ -21,13 +21,19 @@ def client() -> Anthropic:
 
 
 def test_out_of_scope_question_says_so_rather_than_inventing(db, client):
-    sources = rag.retrieve(db, "What is the SCADA failover procedure for the control room?", top_k=4)
+    # Same corpus-growth reasoning as test_retrieval.py's version of this
+    # test: a grid-ops-adjacent question (SCADA failover) now legitimately
+    # retrieves something (real NERC TOP-001-5 excerpts on Control Center
+    # redundancy) rather than nothing — a genuinely unrelated question is
+    # what reliably still returns zero results.
+    question = "What is the best way to bake sourdough bread at home?"
+    sources = rag.retrieve(db, question, top_k=4)
     assert sources == []  # confirms the premise: nothing relevant was retrieved
 
     result = rag.generate_answer(
         client=client,
         model=settings.claude_model,
-        question="What is the SCADA failover procedure for the control room?",
+        question=question,
         region="north-valley",
         sources=sources,
         forecast_summary=None,

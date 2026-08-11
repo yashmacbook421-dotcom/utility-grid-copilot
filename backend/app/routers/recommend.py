@@ -9,7 +9,7 @@ from app.config import get_settings
 from app.data.generate_synthetic_data import REGION_PROFILES
 from app.db import get_db
 from app.schemas import AgenticRecommendationResponse, RecommendationRequest, RecommendationResponse, ToolCallSummary
-from app.services import agentic, cache, forecasting, observability, rag, rate_limiter
+from app.services import agentic, budget, cache, forecasting, observability, rag, rate_limiter
 from app.services.auth import Principal, require_operator
 
 logger = logging.getLogger(__name__)
@@ -59,6 +59,8 @@ def recommend(
 
     if _client is None:
         raise HTTPException(status_code=503, detail="ANTHROPIC_API_KEY is not configured on the backend.")
+
+    budget.enforce(db)
 
     if payload.region not in REGION_PROFILES:
         raise HTTPException(status_code=404, detail=f"Unknown region '{payload.region}'. Valid: {list(REGION_PROFILES)}")
@@ -180,6 +182,8 @@ def recommend_agentic(
 
     if _client is None:
         raise HTTPException(status_code=503, detail="ANTHROPIC_API_KEY is not configured on the backend.")
+
+    budget.enforce(db)
 
     if payload.region not in REGION_PROFILES:
         raise HTTPException(status_code=404, detail=f"Unknown region '{payload.region}'. Valid: {list(REGION_PROFILES)}")

@@ -29,7 +29,7 @@ from app.config import get_settings
 from app.data.generate_synthetic_data import REGION_PROFILES
 from app.models import SurgeEvent
 from app.schemas import SourceCitation
-from app.services import forecasting, notify, rag
+from app.services import budget, forecasting, notify, rag
 
 logger = logging.getLogger(__name__)
 
@@ -89,6 +89,10 @@ def check_region_for_surge(db: Session, region: str, region_profile: dict, force
 
     if _client is None:
         logger.warning("Surge detected for %s but ANTHROPIC_API_KEY is not configured; skipping recommendation", region)
+        return None
+
+    if budget.is_over_budget(db):
+        logger.warning("Surge detected for %s but the daily spend cap has been reached; skipping recommendation", region)
         return None
 
     generation = rag.generate_answer(

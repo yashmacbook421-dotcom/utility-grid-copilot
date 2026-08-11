@@ -205,3 +205,4 @@ class MonitoringDashboardResponse(BaseModel):
     rag: dict
     alerts: dict
     feedback: dict
+    budget: dict

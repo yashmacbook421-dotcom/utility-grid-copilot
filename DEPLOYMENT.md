@@ -60,11 +60,16 @@ process:
   they'd both need to move to Redis — the call-site interface
   (`rate_limiter.check(key)`, `cache.get`/`set`) is already isolated behind
   `app/services/`, so this is a backend swap, not a rewrite.
-- **Cost isn't bounded beyond the rate limiter.** Ten requests/minute/IP
-  still means real Claude spend at any nonzero traffic — check
-  `GET /api/observability/requests` against expected volume before opening
-  this up publicly, and consider whether the rate limit needs to be tighter
-  for a public deployment than it is for local dev.
+- **Cost has a real, enforced ceiling** (`app/services/budget.py`), not just
+  the rate limiter and a dashboard number. `DAILY_SPEND_CAP_USD` (default
+  $5.00) is checked before every Claude call across all four call sites
+  (recommend, agentic, what-if, the surge-watcher loop) — once today's
+  total estimated spend hits the cap, user-facing endpoints return a clear
+  503 and the background watcher skips generation with a logged warning,
+  until it resets at midnight UTC. Visible on the monitoring dashboard
+  (`GET /api/observability/dashboard`'s `budget` section), not just
+  enforced silently. Still worth tightening the rate limiter for a public
+  deployment — the cap bounds total daily spend, not burst traffic.
 
 ## Environment variables required in production
 
@@ -76,6 +81,7 @@ process:
 | `EMBEDDING_MODEL` | `backend/app/config.py` | Local model, no key needed, but changing it means re-embedding every `document_chunks` row |
 | `EIA_API_KEY` | `backend/app/config.py` | Free (eia.gov/opendata/register.php). Without it, the real California demand region is skipped, not an error |
 | `SLACK_WEBHOOK_URL` | `backend/app/config.py` | Without it, surge-watcher notifications are a silent no-op, not an error |
+| `DAILY_SPEND_CAP_USD` | `backend/app/config.py` | Real enforced ceiling on daily Claude spend, default $5.00; 0 or negative disables it — see `app/services/budget.py` |
 | `AUTH_REQUIRED` | `backend/app/config.py` | Set to `true` for every non-local deployment |
 | `OPERATOR_API_KEY` | `backend/app/config.py` | Grants recommendation, monitoring, feedback, what-if, and surge-review access |
 | `ADMIN_API_KEY` | `backend/app/config.py` | Includes operator access and is required for document-ingestion endpoints |

@@ -1,4 +1,5 @@
 import {
+  AgenticRecommendationResponse,
   ForecastResponse,
   MonitoringDashboard,
   RecommendationResponse,
@@ -40,6 +41,19 @@ export async function getRecommendation(
     body: JSON.stringify({ region, question, top_k: topK }),
   });
   return handleResponse<RecommendationResponse>(res);
+}
+
+export async function getAgenticRecommendation(
+  region: string,
+  question: string,
+  topK = 4
+): Promise<AgenticRecommendationResponse> {
+  const res = await fetch(`${API_BASE_URL}/api/recommend/agentic`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ region, question, top_k: topK }),
+  });
+  return handleResponse<AgenticRecommendationResponse>(res);
 }
 
 export async function listPendingSurges(): Promise<SurgeEvent[]> {
