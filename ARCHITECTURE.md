@@ -429,6 +429,11 @@ re-run rather than reporting a partial result.
 | `GET /api/dashboard/regions` | Read-only per-region status (normal/elevated/surge), for the regional dashboard |
 | `POST /api/feedback`, `GET /api/feedback/summary` | 👍/👎 on a specific answer, referenced by its `request_log_id` |
 | `GET /api/observability/dashboard` | Aggregated real-number monitoring (RAG/LLM, alerts, feedback) |
+| `GET /api/outages/{service_area}` | Live outage status for a service area (Customer Service module) |
+| `GET /api/customer-service/customers`, `GET /api/customer-service/customers/{id}` | Demo customer directory + detail (customer + current bill) |
+| `POST /api/customer-service/cases`, `GET /api/customer-service/cases[/{id}]` | Open/list/retrieve a customer-service case |
+| `POST /api/customer-service/cases/{id}/ask` | Ask a question within a case; `mode: standard\|routed` picks the answering pipeline |
+| `POST /api/customer-service/cases/{id}/summary` | Generate + save a structured case summary, closes the case |
 
 ## Final round: what-if, dashboard, feedback, severity, monitoring
 
@@ -469,16 +474,73 @@ per-request/per-event numbers instead.
   region/question/answer/cost instead of duplicating them in a feedback
   table.
 
+## Customer Service Agent Assist
+
+A second, parallel workspace alongside the operator copilot above — same
+RAG/tool-use/guardrail infrastructure, different domain. Where the operator
+copilot answers "should we act on this forecast," this answers "why is this
+specific customer's power out / bill high," for a rep on a call.
+
+Reuses almost everything as-is: the RAG pipeline and pgvector store (a
+`organization="customer_service"` tag separates its 15 knowledge-base docs —
+billing, outage response, safety, SOPs — from the grid-ops corpus, same
+`documents`/`document_chunks` tables, no new ingestion code), the
+`agentic.py` tool-loop pattern (`customer_service_agent.py` is the same
+shape with 4 tools instead of 2), auth/budget/observability/logging
+unchanged. What's new:
+
+- **Tools**: `search_knowledge_base`, `get_outage_status`,
+  `get_customer_bill`, `get_customer_info` — the latter three read static
+  synthetic fixtures (`app/data/customer_service_demo_data.py`), standing in
+  for a real CIS/OMS integration.
+- **Per-case memory**: `CustomerCase.messages` (JSONB) persists the running
+  Claude conversation to Postgres, so multi-turn memory ("which area" →
+  "Folsom" → "how do I explain this") survives a backend restart without any
+  new session infrastructure.
+- **Deterministic guardrails, not prompted-for ones**: `classify_confidence()`
+  and `check_escalation()` are plain code, not a second LLM call — any
+  retrieved source tagged `document_type="safety_procedure"` forces
+  escalation regardless of what the model itself says, and a `confidence ==
+  "low"` answer is replaced with a fixed refusal string rather than the
+  model's own (possibly fabricated) text. Same philosophy as `budget.py`
+  being a real enforced cap rather than a dashboard number.
+- **Split output**: every answer is generated as an `INTERNAL ANALYSIS:` /
+  `CUSTOMER RESPONSE:` pair, parsed by `_split_response()`, so the rep sees
+  the model's reasoning and sources while the customer-facing text stays
+  clean.
+
+### Cost-routed mode: cheap model for tools, strong model for the answer
+
+`run_customer_service_turn_routed()` splits the turn into two phases against
+two different models instead of one: `claude-haiku-4-5` runs the tool-
+gathering loop (`_run_tool_gathering_loop`, shared with the standard path),
+then `claude-sonnet-5` — given the gathered tool results and doc excerpts as
+plain context, no tools — writes the final split answer. Both phases are
+metered separately (`observability.PRICING` has a Haiku row) so `AskCaseResponse.estimated_cost_usd`
+reflects the real blended cost, not an estimate.
+
+Measured on the 5-scenario eval (`app/evals/customer_service_cost_comparison.py`,
+real API calls, not simulated): routed mode was **36% cheaper** ($0.0544 vs
+$0.0851 total) and passed the same scenarios — but it also sometimes skipped
+`search_knowledge_base` on the billing scenario, dropping confidence from
+high to medium and once producing a fabricated-citation warning. That
+tradeoff — cheaper but occasionally less thorough at tool selection — is
+shown in the UI rather than hidden: the mode toggle's hint text states it
+directly, and each answer's cost badge shows which mode produced it.
+
 ## Testing
 
 `backend/tests/` (pytest) — added alongside the eval harness, not instead
 of it: evals answer "is retrieval/generation quality good," tests answer
-"does this specific function do what it claims." `pytest tests/ -v`, 22
+"does this specific function do what it claims." `pytest tests/ -v`, 40
 tests: PDF extraction/chunking/section-detection against a real downloaded
 document (not a synthetic fixture), the two prompt-injection defenses
 (question-based and document-embedded, skipped automatically without
 `ANTHROPIC_API_KEY`), metadata filtering, citation extraction (both formats),
-and FastAPI endpoint tests via `TestClient`.
+FastAPI endpoint tests via `TestClient`, and `test_customer_service.py`'s
+7 scenario tests (outage lookup, restoration-time accuracy, billing,
+out-of-scope refusal, safety escalation, unknown-area low confidence,
+conversation memory), also skipped without `ANTHROPIC_API_KEY`.
 
 One real bug was caught by this suite, not by inspection:
 `test_chunks_never_cross_a_page_boundary` failed on first run, which is how

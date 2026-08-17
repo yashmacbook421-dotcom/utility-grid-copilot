@@ -20,9 +20,10 @@ cp backend/.env.example backend/.env   # fill in ANTHROPIC_API_KEY at minimum
 docker compose up -d --build
 ```
 
-That starts the database, backend, and frontend, and self-seeds the
-synthetic demand data + the 4 hand-written procedure documents automatically
-on first boot. Open **http://localhost:3000**.
+That starts the database, backend, and frontend, and self-seeds real demand
+history (via the EIA API, for California/SMUD/Georgia), the hand-written
+grid-ops procedure documents, and the customer-service knowledge base
+automatically on first boot. Open **http://localhost:3000**.
 
 ### Adding the real document corpus
 
@@ -68,6 +69,9 @@ pytest tests/ -v
 | Retrieval strategy / pipeline comparison (real measured results) | `backend/app/evals/compare.py` |
 | Guardrails (citation faithfulness, injection resistance) | `backend/app/services/rag.py`, `backend/app/evals/golden_set.py` |
 | Observability (per-request cost/latency logging) | `backend/app/services/observability.py` |
+| Regional demand data (real EIA data: California, SMUD, Georgia) | `backend/app/services/eia_ingest.py`, `backend/app/data/regions.py` |
+| Customer Service Agent Assist (outage/billing tools, confidence + escalation guardrails, case summaries) | `backend/app/services/customer_service_agent.py`, `backend/app/routers/customer_service.py` |
+| Cost-routed mode (cheap model gathers tool data, strong model writes the final answer) | `backend/app/services/customer_service_agent.py` (`run_customer_service_turn_routed`), `backend/app/evals/customer_service_cost_comparison.py` |
 
 Full reasoning behind each decision — why no reranker in production, why
 the similarity threshold is what it is, what's been measured vs. assumed —
@@ -75,13 +79,18 @@ is in [ARCHITECTURE.md](ARCHITECTURE.md), not just the code comments.
 
 ## Known limitations
 
-- The 4 synthetic procedure documents are hand-written stand-ins, not real
+- The hand-written grid-ops procedure documents are stand-ins, not real
   vetted utility SOPs — labeled `organization="synthetic"` throughout so
-  this is never ambiguous.
+  this is never ambiguous. Same is true of the customer-service knowledge
+  base (`organization="customer_service"`).
 - Section detection on real PDFs is regex-based heuristics, tuned against
   the actual documents in this corpus — not guaranteed to generalize to
   arbitrarily different document layouts without further tuning.
 - Deployment is documented ([DEPLOYMENT.md](DEPLOYMENT.md)) but not
   currently live — this runs locally via Docker Compose only.
+- Customer Service Agent Assist's customer/outage/billing data
+  (`backend/app/data/customer_service_demo_data.py`) is static synthetic
+  fixtures, not a live CIS/OMS integration — confidence and escalation are
+  deterministic rules, not a separate model-graded judgment.
 
 See ARCHITECTURE.md's "Scaling notes" section for the full, honest list.
