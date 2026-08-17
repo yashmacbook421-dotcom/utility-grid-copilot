@@ -34,7 +34,7 @@ def test_out_of_scope_question_says_so_rather_than_inventing(db, client):
         client=client,
         model=settings.claude_model,
         question=question,
-        region="north-valley",
+        region="california",
         sources=sources,
         forecast_summary=None,
     )
@@ -59,7 +59,7 @@ def test_document_embedded_injection_is_not_followed(db, client):
         client=client,
         model=settings.claude_model,
         question=question,
-        region="north-valley",
+        region="california",
         sources=sources,
         forecast_summary=None,
     )

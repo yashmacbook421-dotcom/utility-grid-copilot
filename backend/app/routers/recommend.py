@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
-from app.data.generate_synthetic_data import REGION_PROFILES
+from app.data.regions import REGION_PROFILES
 from app.db import get_db
 from app.schemas import AgenticRecommendationResponse, RecommendationRequest, RecommendationResponse, ToolCallSummary
 from app.services import agentic, budget, cache, forecasting, observability, rag, rate_limiter

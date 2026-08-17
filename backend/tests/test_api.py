@@ -18,12 +18,41 @@ def test_forecast_regions_includes_seeded_regions(client):
     response = client.get("/api/forecast/regions")
     assert response.status_code == 200
     regions = response.json()["regions"]
-    assert "north-valley" in regions
-    assert "coastal-metro" in regions
+    assert "california" in regions
 
 
 def test_forecast_unknown_region_is_404(client):
     response = client.get("/api/forecast", params={"region": "not-a-real-region"})
+    assert response.status_code == 404
+
+
+def test_outage_status_returns_known_service_area(client):
+    response = client.get("/api/outages/Folsom")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["area"] == "Folsom"
+    assert body["status"] == "active"
+    assert body["customers_affected"] == 247
+
+
+def test_outage_status_404_for_unknown_service_area(client):
+    response = client.get("/api/outages/Roseville")
+    assert response.status_code == 404
+
+
+def test_customer_service_customers_list_and_detail(client):
+    response = client.get("/api/customer-service/customers")
+    assert response.status_code == 200
+    customers = response.json()
+    assert len(customers) > 0
+
+    detail = client.get(f"/api/customer-service/customers/{customers[0]['customer_id']}")
+    assert detail.status_code == 200
+    assert detail.json()["customer"]["customer_id"] == customers[0]["customer_id"]
+
+
+def test_customer_service_unknown_customer_is_404(client):
+    response = client.get("/api/customer-service/customers/CUST-9999")
     assert response.status_code == 404
 
 

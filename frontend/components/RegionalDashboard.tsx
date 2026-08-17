@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { getRegionStatuses } from "@/lib/api";
 import { RegionStatus } from "@/lib/types";
-import { formatRegionLabel } from "@/components/RegionSelect";
+import { STATES, HierarchyNode } from "@/lib/regionHierarchy";
 
 const POLL_INTERVAL_MS = 30_000;
 
@@ -17,6 +17,10 @@ export default function RegionalDashboard({ onSelectRegion }: { onSelectRegion: 
   const [statuses, setStatuses] = useState<RegionStatus[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Empty path = the collapsed root screen (one icon per state). Drilling
+  // in pushes onto the path; the breadcrumb's first segment is always the
+  // selected state once expanded.
+  const [path, setPath] = useState<HierarchyNode[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -45,6 +49,27 @@ export default function RegionalDashboard({ onSelectRegion }: { onSelectRegion: 
     };
   }, []);
 
+  const statusByRegion = useMemo(() => {
+    const map = new Map<string, RegionStatus>();
+    statuses.forEach((s) => map.set(s.region, s));
+    return map;
+  }, [statuses]);
+
+  const current = path[path.length - 1];
+  const children = current?.children ?? [];
+
+  function drillInto(node: HierarchyNode, index: number) {
+    setPath([...path.slice(0, index + 1), node]);
+  }
+
+  function handleTileClick(node: HierarchyNode) {
+    if (node.children && node.children.length > 0) {
+      setPath([...path, node]);
+    } else if (node.regionId) {
+      onSelectRegion(node.regionId);
+    }
+  }
+
   return (
     <div className="card command-card">
       <div className="card-heading-row">
@@ -54,26 +79,96 @@ export default function RegionalDashboard({ onSelectRegion }: { onSelectRegion: 
         </div>
         <span className="refresh-note"><span /> refreshes every 30s</span>
       </div>
-      <p className="card-subtitle">Choose a region to explore its forecast, investigate conditions, or review alerts.</p>
+      <p className="card-subtitle">
+        {!current
+          ? "Explore live grid regions by state, down to the utility serving each area."
+          : path.length === 1
+            ? "Choose a service area to explore its forecast, investigate conditions, or review alerts."
+            : `Sub-divisions of ${current.label}.`}
+      </p>
 
       {loading && <p className="empty-state">Loading region statuses…</p>}
       {error && <div className="error-banner">{error}</div>}
 
+      {!current && (
+        <div className="region-grid">
+          {STATES.map((state) => (
+            <button key={state.id} className="region-tile region-tile-root" onClick={() => setPath([state])}>
+              <span className="region-tile-name">{state.label}</span>
+              <span className="region-tile-sublabel">{state.sublabel}</span>
+              <span className="region-tile-hint">View regions →</span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {current && (
+        <>
+          <nav className="breadcrumb-row" aria-label="Region breadcrumb">
+            {path.map((node, i) => (
+              <span key={node.id} className="breadcrumb-segment">
+                {i > 0 && <span className="breadcrumb-sep">›</span>}
+                {i === path.length - 1 ? (
+                  <span className="breadcrumb-current">{node.label}</span>
+                ) : (
+                  <button className="breadcrumb-link" onClick={() => drillInto(node, i)}>
+                    {node.label}
+                  </button>
+                )}
+              </span>
+            ))}
+          </nav>
+
+          {path.length === 1 && current.regionId && (
+            <button className="statewide-link" onClick={() => onSelectRegion(current.regionId!)}>
+              View statewide forecast
+              {statusByRegion.has(current.regionId) && (
+                <>
+                  {" "}
+                  — {Math.round(statusByRegion.get(current.regionId)!.forecast_peak_mw).toLocaleString()} MW forecast
+                  peak
+                </>
+              )}
+              <span aria-hidden="true"> →</span>
+            </button>
+          )}
+        </>
+      )}
+
       <div className="region-grid">
-        {statuses.map((s) => (
-          <button
-            key={s.region}
-            className={`region-tile region-tile-${s.status}`}
-            onClick={() => onSelectRegion(s.region)}
-          >
-            <span className="region-tile-name">{formatRegionLabel(s.region)}</span>
-            <span className="region-tile-status">
-              <span className={`level-dot level-${s.status === "normal" ? "low" : s.status === "elevated" ? "medium" : "high"}`} />
-              {STATUS_LABEL[s.status]}
-            </span>
-            <span className="region-tile-peak">{Math.round(s.forecast_peak_mw).toLocaleString()} MW forecast peak</span>
-          </button>
-        ))}
+        {children.map((node) => {
+          const status = node.regionId ? statusByRegion.get(node.regionId) : undefined;
+          const isLive = Boolean(node.regionId);
+          const isExplorable = Boolean(node.children && node.children.length > 0);
+          const clickable = isLive || isExplorable;
+
+          return (
+            <button
+              key={node.id}
+              className={`region-tile${status ? ` region-tile-${status.status}` : ""}${clickable ? "" : " region-tile-disabled"}`}
+              onClick={() => handleTileClick(node)}
+              disabled={!clickable}
+            >
+              <span className="region-tile-name">{node.label}</span>
+              {node.sublabel && <span className="region-tile-sublabel">{node.sublabel}</span>}
+
+              {status && (
+                <span className="region-tile-status">
+                  <span
+                    className={`level-dot level-${status.status === "normal" ? "low" : status.status === "elevated" ? "medium" : "high"}`}
+                  />
+                  {STATUS_LABEL[status.status]}
+                </span>
+              )}
+              {status && (
+                <span className="region-tile-peak">{Math.round(status.forecast_peak_mw).toLocaleString()} MW forecast peak</span>
+              )}
+
+              {isExplorable && !isLive && <span className="region-tile-hint">View sub-divisions →</span>}
+              {!clickable && <span className="region-tile-hint">Data not yet available</span>}
+            </button>
+          );
+        })}
       </div>
     </div>
   );

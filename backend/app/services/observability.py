@@ -12,6 +12,7 @@ from app.models import RequestLog
 # to $3.00 / $15.00 per MTok after that — update this table when it does.
 PRICING = {
     "claude-sonnet-5": {"input_per_mtok": 2.00, "output_per_mtok": 10.00},
+    "claude-haiku-4-5": {"input_per_mtok": 1.00, "output_per_mtok": 5.00},
 }
 
 

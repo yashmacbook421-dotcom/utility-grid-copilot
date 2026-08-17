@@ -10,8 +10,9 @@ import SurgePanel from "@/components/SurgePanel";
 import RegionalDashboard from "@/components/RegionalDashboard";
 import WhatIfPanel from "@/components/WhatIfPanel";
 import MonitoringDashboard from "@/components/MonitoringDashboard";
+import CustomerServicePanel from "@/components/CustomerServicePanel";
 
-type Tab = "dashboard" | "ask" | "monitoring";
+type Tab = "dashboard" | "ask" | "customer-service" | "monitoring";
 
 export default function Home() {
   const [tab, setTab] = useState<Tab>("dashboard");
@@ -72,6 +73,12 @@ export default function Home() {
         <button className={`tab-button${tab === "ask" ? " tab-button-active" : ""}`} onClick={() => setTab("ask")}>
           <span aria-hidden="true">✦</span> Copilot
         </button>
+        <button
+          className={`tab-button${tab === "customer-service" ? " tab-button-active" : ""}`}
+          onClick={() => setTab("customer-service")}
+        >
+          <span aria-hidden="true">☎</span> Customer Service
+        </button>
         <button className={`tab-button${tab === "monitoring" ? " tab-button-active" : ""}`} onClick={() => setTab("monitoring")}>
           <span aria-hidden="true">◌</span> Observability
         </button>
@@ -120,6 +127,8 @@ export default function Home() {
           {region && <WhatIfPanel region={region} />}
         </>
       )}
+
+      {tab === "customer-service" && <CustomerServicePanel />}
 
       {tab === "monitoring" && <MonitoringDashboard />}
     </main>

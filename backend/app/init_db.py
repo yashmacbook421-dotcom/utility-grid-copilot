@@ -5,6 +5,7 @@ from sqlalchemy import text
 from app.db import Base, engine
 from app.models import (  # noqa: F401  (register models)
     AnswerFeedback,
+    CustomerCase,
     DemandReading,
     Document,
     DocumentChunk,

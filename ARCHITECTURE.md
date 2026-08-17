@@ -221,11 +221,11 @@ directly. Bounded autonomy: it can notice and recommend, never execute —
 there's no downstream system for "approve" to actually trigger, and the UI
 is honest about that rather than implying otherwise.
 
-Threshold picked empirically, not guessed: across all 4 regions, the
-ordinary next-24h forecast peak sits at 81-95% of that region's own
-trailing-30-day 95th-percentile demand. So a forecast peak that outright
-exceeds the trailing p95 is already a rare, top-5%-of-history event — no
-extra margin needed (`_SURGE_THRESHOLD_RATIO = 1.0` in `surge_watcher.py`).
+Threshold picked empirically, not guessed: the ordinary next-24h forecast
+peak sits at 81-95% of a region's own trailing-30-day 95th-percentile
+demand. So a forecast peak that outright exceeds the trailing p95 is
+already a rare, top-5%-of-history event — no extra margin needed
+(`_SURGE_THRESHOLD_RATIO = 1.0` in `surge_watcher.py`).
 
 Two real bugs found and fixed after initial implementation, not
 theoretical: a race condition (two near-simultaneous checks could both pass
@@ -358,15 +358,19 @@ one happened matters more than the number. Pulled the actual generated
 answer for all 4 flagged cases:
 
 - A "wildfire threatening a substation" question (region: the synthetic
-  `coastal-metro`, not California) now retrieves the real PSPS post-event
-  report at high similarity (0.59) — topically adjacent, but there's still
-  no document describing `coastal-metro`'s own procedure. The model
-  correctly used it as grounded, cited guidance *and* explicitly caveated
-  applicability: "these are PG&E-specific PSPS post-event report
+  `coastal-metro`, since removed — the golden set now runs this question
+  against `california` instead, see below) retrieved the real PSPS
+  post-event report at high similarity (0.59) — topically adjacent, but
+  there was still no document describing `coastal-metro`'s own procedure.
+  The model correctly used it as grounded, cited guidance *and* explicitly
+  caveated applicability: "these are PG&E-specific PSPS post-event report
   material... if coastal-metro refers to a different utility, these
   documents may not directly apply." A subtler defense-in-depth case than
   before — catching a jurisdiction/applicability mismatch, not just an
-  obviously unrelated document.
+  obviously unrelated document. (With the region now genuinely
+  `california`, this same question should retrieve the same document
+  *without* needing the jurisdiction caveat — worth re-running the eval to
+  confirm.)
 - A SCADA-failover question retrieves NERC TOP-001-5 (topically adjacent —
   Control Center data-exchange redundancy, not a SCADA runbook). The model
   named the gap explicitly rather than overclaiming: "not a detailed
@@ -440,9 +444,10 @@ per-request/per-event numbers instead.
 
 - **What-if forecasting** (`forecasting.forecast_whatif`) scales the
   *existing trained model's* forecast by a multiplier rather than
-  retraining or perturbing inputs — works uniformly across all 4 regions,
-  including california, which has no temperature signal to perturb in the
-  first place. When a scenario would exceed the same p95 baseline the
+  retraining or perturbing inputs — a direct, literal answer to "what
+  happens if demand increases by 10%," and works even for california, which
+  has no temperature signal to perturb in the first place. When a scenario
+  would exceed the same p95 baseline the
   surge-watcher uses, it reuses `rag.retrieve`/`generate_answer` (the same
   pattern as `check_region_for_surge`) to explain what an operator should
   do — without creating a real `SurgeEvent` or notifying anyone, since it's

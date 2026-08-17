@@ -291,6 +291,100 @@ a {
   color: var(--text-muted);
 }
 
+.region-tile-sublabel {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: -4px;
+}
+
+.region-tile-hint {
+  font-size: 12px;
+  color: var(--axis);
+}
+
+.region-tile-disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.region-tile-disabled:hover {
+  border-color: var(--border);
+}
+
+.region-tile-root {
+  max-width: 260px;
+  align-items: center;
+  text-align: center;
+  min-height: 120px;
+  justify-content: center;
+  border-color: var(--series-1);
+}
+
+.region-tile-root .region-tile-name {
+  font-size: 20px;
+}
+
+.breadcrumb-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  margin-bottom: 14px;
+}
+
+.breadcrumb-segment {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.breadcrumb-sep {
+  color: var(--text-muted);
+  margin-right: 4px;
+}
+
+.breadcrumb-link {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  padding: 2px 0;
+}
+
+.breadcrumb-link:hover {
+  color: var(--series-1);
+  text-decoration: underline;
+}
+
+.breadcrumb-current {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.statewide-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: transparent;
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  padding: 10px 14px;
+  margin-bottom: 14px;
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.statewide-link:hover {
+  border-color: var(--axis);
+  color: var(--text-primary);
+}
+
 .whatif-suffix {
   display: flex;
   align-items: center;
@@ -401,6 +495,157 @@ a {
   font-size: 14px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
+}
+
+/* ---- Customer Service Agent Assist ---- */
+
+.cs-workspace {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.cs-identify-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.cs-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.cs-customer-info,
+.cs-outage-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+  padding-top: 16px;
+  margin-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.cs-outage-card {
+  margin-top: 16px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--page-plane, rgba(4, 15, 28, 0.35));
+}
+
+.cs-outage-active {
+  border-left: 3px solid var(--status-critical);
+}
+
+.cs-outage-resolved {
+  border-left: 3px solid var(--status-warning);
+}
+
+.cs-outage-none {
+  border-left: 3px solid var(--status-good);
+}
+
+.cs-outage-grid {
+  border-top: none;
+  padding-top: 0;
+  margin-top: 10px;
+}
+
+.cs-escalation-banner {
+  margin-bottom: 16px;
+  padding: 12px 16px;
+  border-radius: 10px;
+  border: 1px solid var(--status-critical);
+  background: rgba(208, 59, 59, 0.12);
+  color: var(--text-primary);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.cs-turn {
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+}
+
+.cs-turn-question {
+  font-size: 13px;
+  color: var(--text-muted);
+  font-style: italic;
+  margin: 0 0 10px;
+}
+
+.cs-confidence-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.cs-confidence-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-radius: 4px;
+  padding: 3px 8px;
+}
+
+.cs-confidence-high {
+  color: var(--status-good);
+  background: rgba(14, 163, 12, 0.14);
+}
+
+.cs-confidence-medium {
+  color: var(--status-warning);
+  background: rgba(250, 178, 25, 0.14);
+}
+
+.cs-confidence-low {
+  color: var(--status-critical);
+  background: rgba(208, 59, 59, 0.14);
+}
+
+.cs-mode-cost-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 10.5px;
+  font-family: var(--font-mono, monospace);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 3px 8px;
+  margin-left: auto;
+}
+
+.cs-summary-row {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.cs-summary-block {
+  margin-top: 16px;
+  padding: 14px 16px;
+  border-radius: 10px;
+  background: var(--page-plane, rgba(4, 15, 28, 0.35));
+  border: 1px solid var(--border);
+}
+
+.cs-summary-text {
+  white-space: pre-wrap;
+  font-family: inherit;
+  font-size: 13.5px;
+  line-height: 1.6;
+  margin: 8px 0 0;
+  color: var(--text-secondary);
 }
 
 .monitoring-caveat {

@@ -6,15 +6,9 @@ import { approveSurge, listPendingSurges, rejectSurge, triggerDemoSurge } from "
 import { SurgeEvent } from "@/lib/types";
 import SourceCard from "@/components/SourceCard";
 import { splitBottomLine } from "@/lib/answerFormat";
+import { formatRegionLabel } from "@/components/RegionSelect";
 
 const POLL_INTERVAL_MS = 30_000;
-
-function formatRegionName(region: string): string {
-  return region
-    .split("-")
-    .map((word) => word[0].toUpperCase() + word.slice(1))
-    .join(" ");
-}
 
 export default function SurgePanel({ region }: { region: string }) {
   const [surges, setSurges] = useState<SurgeEvent[]>([]);
@@ -26,7 +20,7 @@ export default function SurgePanel({ region }: { region: string }) {
     let cancelled = false;
 
     function poll() {
-      listPendingSurges()
+      listPendingSurges(region)
         .then((list) => {
           if (!cancelled) setSurges(list);
         })
@@ -42,14 +36,14 @@ export default function SurgePanel({ region }: { region: string }) {
       cancelled = true;
       clearInterval(interval);
     };
-  }, []);
+  }, [region]);
 
   async function handleDemoTrigger() {
     setTriggering(true);
     setTriggerError(null);
     try {
       await triggerDemoSurge(region);
-      const list = await listPendingSurges();
+      const list = await listPendingSurges(region);
       setSurges(list);
     } catch (err) {
       setTriggerError(err instanceof Error ? err.message : "Failed to trigger a demo surge.");
@@ -78,7 +72,7 @@ export default function SurgePanel({ region }: { region: string }) {
           {surges.length > 0 ? "Grid Copilot noticed something" : "No active alerts"}
         </p>
         <button className="button button-outline button-small" onClick={handleDemoTrigger} disabled={triggering}>
-          {triggering ? "Triggering…" : `Trigger demo surge (${formatRegionName(region)})`}
+          {triggering ? "Triggering…" : `Trigger demo surge (${formatRegionLabel(region)})`}
         </button>
       </div>
       {triggerError && <div className="error-banner" style={{ marginTop: 12 }}>{triggerError}</div>}
@@ -89,7 +83,7 @@ export default function SurgePanel({ region }: { region: string }) {
         <div className="surge-card" key={surge.id}>
           <div className="surge-headline-row">
             <p className="surge-headline">
-              Demand surge expected for <strong>{formatRegionName(surge.region)}</strong> —{" "}
+              Demand surge expected for <strong>{formatRegionLabel(surge.region)}</strong> —{" "}
               {Math.round(surge.forecast_peak_mw).toLocaleString()} MW around{" "}
               {new Date(surge.peak_forecast_time).toLocaleString(undefined, {
                 weekday: "long",

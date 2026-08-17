@@ -12,7 +12,7 @@ from typing import Callable
 from anthropic import Anthropic
 from sqlalchemy.orm import Session
 
-from app.data.generate_synthetic_data import REGION_PROFILES
+from app.data.regions import REGION_PROFILES
 from app.evals.golden_set import GoldenItem
 from app.schemas import SourceCitation
 from app.services import agentic, forecasting, rag

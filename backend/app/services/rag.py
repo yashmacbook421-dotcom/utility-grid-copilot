@@ -170,6 +170,7 @@ def retrieve(
             section=chunk.section,
             source_url=document.source_url,
             organization=document.organization,
+            document_type=document.document_type,
         )
         for chunk, document, dist in results
         if 1 - float(dist) >= _MIN_SIMILARITY

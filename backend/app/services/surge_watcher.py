@@ -9,11 +9,12 @@ POST /api/recommend (deterministic RAG) and POST /api/recommend/agentic
 prompting it, and its output sits behind an approval gate rather than being
 returned directly. Proactive trigger + bounded autonomy + human-in-the-loop.
 
-Threshold picked empirically (2026-07-28), not guessed: for all 3 seeded
-synthetic regions, the ordinary next-24h forecast peak sits at ~81-88% of
-that region's own trailing-30-day 95th-percentile demand (north-valley
-1352 vs p95 1659; coastal-metro 2477 vs p95 3048; high-desert 775 vs p95
-881). So a forecast peak that outright *exceeds* the trailing p95 is
+Threshold picked empirically (2026-07-28), not guessed: originally
+calibrated against 3 now-removed synthetic regions, where the ordinary
+next-24h forecast peak sat at ~81-88% of each region's own trailing-30-day
+95th-percentile demand. The math is self-referential per region (peak vs.
+that same region's own history), so it still applies unchanged to
+california. A forecast peak that outright *exceeds* the trailing p95 is
 already a rare, top-5%-of-history event — no extra margin needed on top.
 Same "measure, then pick the constant" approach as _MIN_SIMILARITY in rag.py.
 """
@@ -26,7 +27,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
-from app.data.generate_synthetic_data import REGION_PROFILES
+from app.data.regions import REGION_PROFILES
 from app.models import SurgeEvent
 from app.schemas import SourceCitation
 from app.services import budget, forecasting, notify, rag

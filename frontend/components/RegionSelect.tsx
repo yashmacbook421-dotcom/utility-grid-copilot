@@ -2,6 +2,7 @@
 
 const REGION_LABEL_OVERRIDES: Record<string, string> = {
   california: "California (real CAISO data)",
+  smud: "SMUD (Sacramento)",
 };
 
 export function formatRegionLabel(region: string): string {

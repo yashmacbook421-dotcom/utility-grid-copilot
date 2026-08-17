@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from anthropic import Anthropic
 from sqlalchemy.orm import Session
 
-from app.data.generate_synthetic_data import REGION_PROFILES
+from app.data.regions import REGION_PROFILES
 from app.schemas import SourceCitation
 from app.services import forecasting, rag
 

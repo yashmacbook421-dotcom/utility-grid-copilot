@@ -148,6 +148,45 @@ class SurgeEvent(Base):
     resolved_note: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
+class CustomerCase(Base):
+    """One customer-service interaction: the audit trail and conversation
+    memory for the Customer Service Agent Assist module (see
+    app/services/customer_service_agent.py). `messages` is the running
+    Claude conversation for this case (raw Anthropic message dicts) — DB-
+    backed rather than an in-memory dict so memory survives a backend
+    restart, same reasoning as everything else in this project that's meant
+    to be a real audit trail rather than a convenience cache.
+
+    Distinct from RequestLog: RequestLog is generic per-call telemetry
+    (latency/tokens/cost) shared across every Claude-calling endpoint in the
+    app; this table is the case-level domain object, analogous to how
+    SurgeEvent is the domain object for surge detection while also being
+    logged through RequestLog for its own Claude calls.
+    """
+
+    __tablename__ = "customer_cases"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    agent_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    # Not a real FK — customer/outage/bill data is a static synthetic
+    # fixture (app/data/customer_service_demo_data.py), not a DB table.
+    customer_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    service_area: Mapped[str | None] = mapped_column(String(100), nullable=True)
+
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="open")  # "open" | "closed"
+    messages: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+
+    escalated: Mapped[bool] = mapped_column(default=False)
+    escalation_reason: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+    summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Links back to the granular per-turn RequestLog rows for this case.
+    request_log_ids: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+
+
 class AnswerFeedback(Base):
     """A thumbs up/down on a specific answer, referenced by the RequestLog
     row it came from — reuses that row's region/question/answer/sources

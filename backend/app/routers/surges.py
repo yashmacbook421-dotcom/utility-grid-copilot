@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.data.generate_synthetic_data import REGION_PROFILES
+from app.data.regions import REGION_PROFILES
 from app.db import get_db
 from app.models import SurgeEvent
 from app.schemas import SurgeEventResponse, SurgeResolutionRequest
@@ -15,10 +15,17 @@ router = APIRouter(prefix="/api/surges", tags=["surges"])
 
 
 @router.get("", response_model=list[SurgeEventResponse])
-def list_surges(status: str | None = None, db: Session = Depends(get_db), _: Principal = Depends(require_operator)):
+def list_surges(
+    status: str | None = None,
+    region: str | None = None,
+    db: Session = Depends(get_db),
+    _: Principal = Depends(require_operator),
+):
     stmt = select(SurgeEvent).order_by(SurgeEvent.created_at.desc())
     if status:
         stmt = stmt.where(SurgeEvent.status == status)
+    if region:
+        stmt = stmt.where(SurgeEvent.region == region)
     return db.execute(stmt).scalars().all()
 
 

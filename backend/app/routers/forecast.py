@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
-from app.data.generate_synthetic_data import REGION_PROFILES
+from app.data.regions import REGION_PROFILES
 from app.db import get_db
 from app.schemas import ForecastResponse, WhatIfRequest, WhatIfResponse
 from app.services import budget, forecasting, rag, surge_watcher
@@ -19,7 +19,7 @@ _client: Anthropic | None = (
 
 @router.get("", response_model=ForecastResponse)
 def get_forecast(
-    region: str = Query(..., description="Grid region id, e.g. 'coastal-metro'"),
+    region: str = Query(..., description="Grid region id, e.g. 'california'"),
     horizon_hours: int = Query(default=24, ge=1, le=72),
     db: Session = Depends(get_db),
 ):

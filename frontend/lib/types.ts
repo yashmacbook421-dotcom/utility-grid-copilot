@@ -32,6 +32,7 @@ export interface SourceCitation {
   section?: string | null;
   source_url?: string | null;
   organization?: string | null;
+  document_type?: string | null;
 }
 
 export interface RecommendationResponse {
@@ -130,6 +131,87 @@ export interface MonitoringDashboard {
     spent_today_usd: number;
     over_cap: boolean;
   };
+}
+
+// ---- Customer Service Agent Assist ----
+
+export interface CustomerInfo {
+  customer_id: string;
+  name: string;
+  address: string;
+  zip: string;
+  service_area: string;
+  service_status: string;
+  account_status: string;
+}
+
+export interface BillInfo {
+  customer_id: string;
+  current_bill_usd: number;
+  previous_bill_usd: number;
+  current_usage_kwh: number;
+  previous_usage_kwh: number;
+  billing_period: string;
+  rate_plan: string;
+  usage_change_pct: number | null;
+}
+
+export interface CustomerDetail {
+  customer: CustomerInfo;
+  bill: BillInfo | null;
+}
+
+export interface OutageStatus {
+  area: string;
+  status: string;
+  customers_affected: number;
+  cause: string | null;
+  crew_status: string | null;
+  estimated_restoration: string | null;
+  last_updated: string | null;
+  resolved_at: string | null;
+}
+
+export interface CustomerCase {
+  id: string;
+  created_at: string;
+  updated_at: string;
+  agent_id: string;
+  customer_id: string | null;
+  service_area: string | null;
+  status: string;
+  escalated: boolean;
+  escalation_reason: string | null;
+  summary: string | null;
+}
+
+export interface EscalationInfo {
+  required: boolean;
+  reason: string | null;
+}
+
+export interface AskCaseResponse {
+  case_id: string;
+  question: string;
+  mode: "standard" | "routed";
+  internal_analysis: string;
+  customer_response: string;
+  confidence: "high" | "medium" | "low";
+  sources: SourceCitation[];
+  tool_calls: ToolCallSummary[];
+  escalation: EscalationInfo;
+  warnings: string[];
+  iterations: number;
+  input_tokens: number;
+  output_tokens: number;
+  estimated_cost_usd: number | null;
+  request_log_id: string | null;
+}
+
+export interface CaseSummaryResponse {
+  case_id: string;
+  summary: string;
+  status: string;
 }
 
 export interface ChartRow {

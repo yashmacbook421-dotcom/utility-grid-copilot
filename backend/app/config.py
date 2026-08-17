@@ -8,6 +8,10 @@ class Settings(BaseSettings):
     anthropic_api_key: str = ""
     eia_api_key: str = ""
     claude_model: str = "claude-sonnet-5"
+    # Cheaper/faster model used for the "cost-routed" customer-service mode's
+    # data-gathering phase (tool selection) — see services/customer_service_agent.py.
+    # The final grounded answer still goes through claude_model.
+    claude_router_model: str = "claude-haiku-4-5"
     embedding_model: str = "all-MiniLM-L6-v2"
     embedding_dim: int = 384
     cors_origins: str = "http://localhost:3000"

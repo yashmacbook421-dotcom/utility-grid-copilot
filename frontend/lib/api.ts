@@ -1,7 +1,13 @@
 import {
   AgenticRecommendationResponse,
+  AskCaseResponse,
+  CaseSummaryResponse,
+  CustomerCase,
+  CustomerDetail,
+  CustomerInfo,
   ForecastResponse,
   MonitoringDashboard,
+  OutageStatus,
   RecommendationResponse,
   RegionStatus,
   SurgeEvent,
@@ -56,8 +62,9 @@ export async function getAgenticRecommendation(
   return handleResponse<AgenticRecommendationResponse>(res);
 }
 
-export async function listPendingSurges(): Promise<SurgeEvent[]> {
-  const res = await fetch(`${API_BASE_URL}/api/surges?status=pending`, { cache: "no-store" });
+export async function listPendingSurges(region: string): Promise<SurgeEvent[]> {
+  const params = new URLSearchParams({ status: "pending", region });
+  const res = await fetch(`${API_BASE_URL}/api/surges?${params.toString()}`, { cache: "no-store" });
   return handleResponse<SurgeEvent[]>(res);
 }
 
@@ -122,4 +129,59 @@ export async function submitFeedback(
 export async function getMonitoringDashboard(): Promise<MonitoringDashboard> {
   const res = await fetch(`${API_BASE_URL}/api/observability/dashboard`, { cache: "no-store" });
   return handleResponse<MonitoringDashboard>(res);
+}
+
+// ---- Customer Service Agent Assist ----
+
+export async function listCustomers(): Promise<CustomerInfo[]> {
+  const res = await fetch(`${API_BASE_URL}/api/customer-service/customers`, { cache: "no-store" });
+  return handleResponse<CustomerInfo[]>(res);
+}
+
+export async function getCustomer(customerId: string): Promise<CustomerDetail> {
+  const res = await fetch(`${API_BASE_URL}/api/customer-service/customers/${encodeURIComponent(customerId)}`, {
+    cache: "no-store",
+  });
+  return handleResponse<CustomerDetail>(res);
+}
+
+export async function getOutageStatus(serviceArea: string): Promise<OutageStatus> {
+  const res = await fetch(`${API_BASE_URL}/api/outages/${encodeURIComponent(serviceArea)}`, { cache: "no-store" });
+  return handleResponse<OutageStatus>(res);
+}
+
+export async function openCase(
+  agentId: string,
+  customerId?: string,
+  serviceArea?: string
+): Promise<CustomerCase> {
+  const res = await fetch(`${API_BASE_URL}/api/customer-service/cases`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ agent_id: agentId, customer_id: customerId ?? null, service_area: serviceArea ?? null }),
+  });
+  return handleResponse<CustomerCase>(res);
+}
+
+export async function askCustomerService(
+  caseId: string,
+  question: string,
+  mode: "standard" | "routed" = "standard"
+): Promise<AskCaseResponse> {
+  const res = await fetch(`${API_BASE_URL}/api/customer-service/cases/${caseId}/ask`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ question, mode }),
+  });
+  return handleResponse<AskCaseResponse>(res);
+}
+
+export async function summarizeCase(caseId: string): Promise<CaseSummaryResponse> {
+  const res = await fetch(`${API_BASE_URL}/api/customer-service/cases/${caseId}/summary`, { method: "POST" });
+  return handleResponse<CaseSummaryResponse>(res);
+}
+
+export async function listCases(): Promise<CustomerCase[]> {
+  const res = await fetch(`${API_BASE_URL}/api/customer-service/cases`, { cache: "no-store" });
+  return handleResponse<CustomerCase[]>(res);
 }

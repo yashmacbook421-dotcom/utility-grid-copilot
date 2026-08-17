@@ -52,6 +52,7 @@ class SourceCitation(BaseModel):
     section: str | None = None
     source_url: str | None = None
     organization: str | None = None
+    document_type: str | None = None
 
 
 class RecommendationResponse(BaseModel):
@@ -206,3 +207,103 @@ class MonitoringDashboardResponse(BaseModel):
     alerts: dict
     feedback: dict
     budget: dict
+
+
+# ---- Customer Service Agent Assist ----
+
+
+class CustomerInfoResponse(BaseModel):
+    customer_id: str
+    name: str
+    address: str
+    zip: str
+    service_area: str
+    service_status: str
+    account_status: str
+
+
+class BillInfoResponse(BaseModel):
+    customer_id: str
+    current_bill_usd: float
+    previous_bill_usd: float
+    current_usage_kwh: float
+    previous_usage_kwh: float
+    billing_period: str
+    rate_plan: str
+    usage_change_pct: float | None = None
+
+
+class CustomerDetailResponse(BaseModel):
+    customer: CustomerInfoResponse
+    bill: BillInfoResponse | None = None
+
+
+class OutageStatusResponse(BaseModel):
+    area: str
+    status: str
+    customers_affected: int
+    cause: str | None = None
+    crew_status: str | None = None
+    estimated_restoration: datetime | None = None
+    last_updated: datetime | None = None
+    resolved_at: datetime | None = None
+
+
+class OpenCaseRequest(BaseModel):
+    agent_id: str = Field(..., min_length=1, max_length=255)
+    customer_id: str | None = None
+    service_area: str | None = None
+
+
+class CustomerCaseResponse(BaseModel):
+    id: uuid.UUID
+    created_at: datetime
+    updated_at: datetime
+    agent_id: str
+    customer_id: str | None = None
+    service_area: str | None = None
+    status: str
+    escalated: bool
+    escalation_reason: str | None = None
+    summary: str | None = None
+
+    model_config = {"from_attributes": True}
+
+
+class AskCaseRequest(BaseModel):
+    question: str = Field(..., min_length=1, max_length=1000)
+    # "standard" = one model (claude_model) for the whole turn, tools included.
+    # "routed" = a cheap model (claude_router_model) gathers data via tools,
+    # then claude_model writes only the final answer, no tools. See
+    # services/customer_service_agent.run_customer_service_turn_routed.
+    # "routed" mode does not read/write case conversation memory.
+    mode: str = Field(default="standard", pattern="^(standard|routed)$")
+
+
+class EscalationInfo(BaseModel):
+    required: bool
+    reason: str | None = None
+
+
+class AskCaseResponse(BaseModel):
+    case_id: uuid.UUID
+    question: str
+    mode: str
+    internal_analysis: str
+    customer_response: str
+    confidence: str  # "high" | "medium" | "low"
+    sources: list[SourceCitation]
+    tool_calls: list[ToolCallSummary]
+    escalation: EscalationInfo
+    warnings: list[str] = Field(default_factory=list)
+    iterations: int
+    input_tokens: int
+    output_tokens: int
+    estimated_cost_usd: float | None = None
+    request_log_id: uuid.UUID | None = None
+
+
+class CaseSummaryResponse(BaseModel):
+    case_id: uuid.UUID
+    summary: str
+    status: str

@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from app.data.generate_synthetic_data import REGION_PROFILES
+from app.data.regions import REGION_PROFILES
 from app.db import get_db
 from app.schemas import DashboardRegionsResponse, RegionStatusResponse
 from app.services import surge_watcher
