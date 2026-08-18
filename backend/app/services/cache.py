@@ -1,11 +1,14 @@
-"""Tiny in-memory TTL cache for recommendation responses.
+"""Tiny in-memory TTL cache, generic key/value.
 
-Repeated identical (region, question, top_k) requests are a real cost driver
-in a dashboard setting — someone reloading the page, or several operators
-asking the same obvious question. Trades a little staleness for a Claude
-call skipped entirely. Only applied to the deterministic /api/recommend
-endpoint — the agentic endpoint is left uncached so its tool-choice behavior
-stays visible on every call.
+Originally for /api/recommend: repeated identical (region, question, top_k)
+requests are a real cost driver in a dashboard setting — someone reloading
+the page, or several operators asking the same obvious question. Trades a
+little staleness for a Claude call skipped entirely; the agentic endpoint is
+left uncached so its tool-choice behavior stays visible on every call.
+
+Also used by app.services.weather_ingest: the 30s-polled regional dashboard
+calls forecasting.forecast() constantly, which would otherwise hit the
+weather API on every tick for data that doesn't change that fast.
 """
 
 import threading

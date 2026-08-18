@@ -1,8 +1,12 @@
+import json
 import logging
 import time
+from typing import Iterator
 
 from anthropic import Anthropic
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.encoders import jsonable_encoder
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
@@ -23,6 +27,10 @@ settings = get_settings()
 _client: Anthropic | None = (
     Anthropic(api_key=settings.anthropic_api_key, timeout=45.0) if settings.anthropic_api_key else None
 )
+
+
+def _sse(event: str, data: dict) -> str:
+    return f"event: {event}\ndata: {json.dumps(jsonable_encoder(data))}\n\n"
 
 
 @router.post("", response_model=RecommendationResponse)
@@ -165,6 +173,133 @@ def recommend(
     )
     cache.set(cache_key, response)
     return response
+
+
+@router.post("/stream")
+def recommend_stream(
+    payload: RecommendationRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    _: Principal = Depends(require_operator),
+):
+    """Same deterministic pipeline as POST /api/recommend, but delivered as
+    Server-Sent Events so the frontend can render the answer as Claude writes
+    it instead of waiting for the whole response. Not cached — streaming and
+    the response cache are two different latency strategies, and caching a
+    stream would mean replaying it instantly on a hit anyway (no benefit)
+    while complicating the cache-hit code path for no real gain.
+    """
+    rate_limiter.enforce(request)
+
+    if _client is None:
+        raise HTTPException(status_code=503, detail="ANTHROPIC_API_KEY is not configured on the backend.")
+
+    budget.enforce(db)
+
+    if payload.region not in REGION_PROFILES:
+        raise HTTPException(status_code=404, detail=f"Unknown region '{payload.region}'. Valid: {list(REGION_PROFILES)}")
+
+    def event_stream() -> Iterator[str]:
+        start = time.perf_counter()
+        try:
+            retrieval_timing: dict = {}
+            sources = rag.retrieve(
+                db,
+                payload.question,
+                top_k=payload.top_k,
+                timing=retrieval_timing,
+                organization=payload.source_organization,
+                document_type=payload.source_document_type,
+                region=payload.source_region,
+            )
+            yield _sse("sources", {"sources": sources})
+
+            forecast_data = None
+            forecast_summary = None
+            try:
+                forecast_data = forecasting.forecast(db, payload.region, REGION_PROFILES[payload.region], horizon_hours=24)
+                forecast_summary = rag.summarize_forecast(forecast_data)
+            except ValueError:
+                pass  # no seeded demand data yet; still answer from procedures alone
+
+            full_answer = ""
+            input_tokens = 0
+            output_tokens = 0
+            for event in rag.stream_answer(
+                _client, settings.claude_model, payload.question, payload.region, sources, forecast_summary
+            ):
+                if event["type"] == "delta":
+                    yield _sse("delta", {"text": event["text"]})
+                else:  # "done"
+                    full_answer = event["answer"]
+                    input_tokens = event["input_tokens"]
+                    output_tokens = event["output_tokens"]
+
+            # Citation-faithfulness check needs the full text, so it necessarily
+            # runs a beat after the client has already rendered every delta —
+            # the same "guardrail trails the visible stream" tradeoff called
+            # out in rag.stream_answer's docstring.
+            warnings: list[str] = []
+            _, fabricated_citations = rag.extract_citations(full_answer, [s.title for s in sources])
+            if fabricated_citations:
+                warnings.append(
+                    "This answer cites a source that wasn't in the retrieved procedures — "
+                    "verify it manually before acting on it."
+                )
+                logger.warning(
+                    "Fabricated citation(s) in /api/recommend/stream response for region=%s: %s",
+                    payload.region,
+                    fabricated_citations,
+                )
+
+            total_ms = (time.perf_counter() - start) * 1000
+            cost = observability.estimate_cost_usd(settings.claude_model, input_tokens, output_tokens)
+            request_log_id = observability.log_request(
+                db,
+                endpoint="/api/recommend/stream",
+                region=payload.region,
+                question=payload.question,
+                embedding_ms=retrieval_timing.get("embedding_ms"),
+                retrieval_ms=retrieval_timing.get("search_ms"),
+                total_ms=total_ms,
+                retrieved_sources=[
+                    {
+                        "title": s.title,
+                        "similarity": s.similarity,
+                        "page_number": s.page_number,
+                        "section": s.section,
+                        "organization": s.organization,
+                    }
+                    for s in sources
+                ],
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                estimated_cost_usd=cost,
+                status="ok",
+            )
+
+            yield _sse(
+                "done",
+                {
+                    "answer": full_answer,
+                    "warnings": warnings,
+                    "forecast_context": forecast_data,
+                    "request_log_id": request_log_id,
+                },
+            )
+        except Exception as exc:
+            observability.log_request(
+                db,
+                endpoint="/api/recommend/stream",
+                region=payload.region,
+                question=payload.question,
+                total_ms=(time.perf_counter() - start) * 1000,
+                status="error",
+                error_message=str(exc),
+            )
+            yield _sse("error", {"message": str(exc)})
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
 
 
 @router.post("/agentic", response_model=AgenticRecommendationResponse)

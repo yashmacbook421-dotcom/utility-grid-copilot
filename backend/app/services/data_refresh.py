@@ -17,12 +17,13 @@ long gap) never creates duplicates.
 import logging
 from datetime import datetime, timezone
 
+import requests
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.db import engine
 from app.models import DemandReading
-from app.services import eia_ingest
+from app.services import eia_ingest, weather_ingest
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +54,18 @@ def refresh_eia_demand(db: Session, region: str) -> int:
     df = df[df["time"] > latest]
     if df.empty:
         return 0
+
+    # eia_ingest.fetch_demand leaves temperature_c null on every row; without
+    # this, freshly-refreshed rows would sit alongside a backfilled history
+    # of real values, and pandas silently turns those nulls into NaN the
+    # moment the column has other floats in it — not valid JSON (see
+    # forecasting.py's history_points serialization).
+    try:
+        weather = weather_ingest.fetch_historical_temperature(region, df["time"].min(), df["time"].max())
+        temps_by_hour = weather.set_index("time")["temperature_c"]
+        df["temperature_c"] = df["time"].dt.floor("h").map(temps_by_hour)
+    except requests.exceptions.RequestException:
+        logger.exception("Weather refresh request failed for %s, new rows will keep temperature_c null this cycle", region)
 
     with engine.begin() as conn:
         df.to_sql("demand_readings", conn, if_exists="append", index=False)

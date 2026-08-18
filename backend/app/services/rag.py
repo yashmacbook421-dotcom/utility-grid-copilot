@@ -4,6 +4,7 @@ then ground a Claude answer in the retrieved passages (+ live forecast context).
 
 import re
 import time
+from collections.abc import Iterator
 from dataclasses import dataclass
 
 from anthropic import Anthropic
@@ -253,6 +254,22 @@ class GenerationResult:
     output_tokens: int
 
 
+def _label(s: SourceCitation) -> str:
+    return f"[Source: {s.title}, p.{s.page_number}]" if s.page_number else f"[Source: {s.title}]"
+
+
+def _build_user_message(
+    question: str, region: str, sources: list[SourceCitation], forecast_summary: str | None
+) -> str:
+    context_blocks = "\n\n".join(f"{_label(s)}\n{s.excerpt}" for s in sources) or "No matching procedures found."
+    forecast_block = f"\n\nCurrent forecast context for {region}:\n{forecast_summary}" if forecast_summary else ""
+    return (
+        f"Region: {region}\n"
+        f"Operator question: {question}{forecast_block}\n\n"
+        f"Relevant operating procedures:\n{context_blocks}"
+    )
+
+
 def generate_answer(
     client: Anthropic,
     model: str,
@@ -261,18 +278,7 @@ def generate_answer(
     sources: list[SourceCitation],
     forecast_summary: str | None,
 ) -> GenerationResult:
-    def _label(s: SourceCitation) -> str:
-        return f"[Source: {s.title}, p.{s.page_number}]" if s.page_number else f"[Source: {s.title}]"
-
-    context_blocks = "\n\n".join(f"{_label(s)}\n{s.excerpt}" for s in sources) or "No matching procedures found."
-
-    forecast_block = f"\n\nCurrent forecast context for {region}:\n{forecast_summary}" if forecast_summary else ""
-
-    user_message = (
-        f"Region: {region}\n"
-        f"Operator question: {question}{forecast_block}\n\n"
-        f"Relevant operating procedures:\n{context_blocks}"
-    )
+    user_message = _build_user_message(question, region, sources, forecast_summary)
 
     # 2048 rather than 1024: adaptive thinking's depth varies per question, and on
     # a 1024 budget a heavier thinking chain can occasionally consume the whole
@@ -297,3 +303,46 @@ def generate_answer(
         input_tokens=response.usage.input_tokens,
         output_tokens=response.usage.output_tokens,
     )
+
+
+def stream_answer(
+    client: Anthropic,
+    model: str,
+    question: str,
+    region: str,
+    sources: list[SourceCitation],
+    forecast_summary: str | None,
+) -> Iterator[dict]:
+    """Same grounding/prompt as generate_answer, but yields the answer as
+    Claude writes it instead of returning it whole. Yields one
+    {"type": "delta", "text": str} per chunk, then a single {"type": "done",
+    "answer": str, "input_tokens": int, "output_tokens": int} once the
+    response completes — the citation-faithfulness check (extract_citations)
+    still needs the *full* text, so callers accumulate deltas themselves and
+    only trust the "done" event's answer as final; this is the one guardrail
+    that necessarily runs a beat after the visible text finishes streaming.
+    """
+    user_message = _build_user_message(question, region, sources, forecast_summary)
+
+    with client.messages.stream(
+        model=model,
+        max_tokens=2048,
+        system=SYSTEM_PROMPT,
+        messages=[{"role": "user", "content": user_message}],
+    ) as stream:
+        for text in stream.text_stream:
+            yield {"type": "delta", "text": text}
+        final_message = stream.get_final_message()
+
+    answer = "".join(block.text for block in final_message.content if block.type == "text")
+    if not answer.strip():
+        answer = (
+            "The copilot didn't produce a response for this question — please try rephrasing it "
+            "or asking again."
+        )
+    yield {
+        "type": "done",
+        "answer": answer,
+        "input_tokens": final_message.usage.input_tokens,
+        "output_tokens": final_message.usage.output_tokens,
+    }

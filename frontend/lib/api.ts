@@ -10,6 +10,7 @@ import {
   OutageStatus,
   RecommendationResponse,
   RegionStatus,
+  SourceCitation,
   SurgeEvent,
   WhatIfResponse,
 } from "./types";
@@ -47,6 +48,78 @@ export async function getRecommendation(
     body: JSON.stringify({ region, question, top_k: topK }),
   });
   return handleResponse<RecommendationResponse>(res);
+}
+
+export async function streamRecommendation(
+  region: string,
+  question: string,
+  handlers: { onDelta?: (text: string) => void; onSources?: (sources: SourceCitation[]) => void },
+  topK = 4
+): Promise<RecommendationResponse> {
+  const res = await fetch(`${API_BASE_URL}/api/recommend/stream`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ region, question, top_k: topK }),
+  });
+  if (!res.ok || !res.body) {
+    const body = await res.text();
+    throw new Error(`API error ${res.status}: ${body}`);
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let sources: SourceCitation[] = [];
+  let answer = "";
+  let warnings: string[] = [];
+  let forecastContext: ForecastResponse | null = null;
+  let requestLogId: string | null = null;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+
+    let separatorIndex: number;
+    while ((separatorIndex = buffer.indexOf("\n\n")) !== -1) {
+      const rawEvent = buffer.slice(0, separatorIndex);
+      buffer = buffer.slice(separatorIndex + 2);
+
+      const eventMatch = rawEvent.match(/^event: (.+)$/m);
+      const dataMatch = rawEvent.match(/^data: (.+)$/m);
+      if (!eventMatch || !dataMatch) continue;
+      const data = JSON.parse(dataMatch[1]);
+
+      switch (eventMatch[1]) {
+        case "sources":
+          sources = data.sources;
+          handlers.onSources?.(sources);
+          break;
+        case "delta":
+          answer += data.text;
+          handlers.onDelta?.(data.text);
+          break;
+        case "done":
+          answer = data.answer;
+          warnings = data.warnings;
+          forecastContext = data.forecast_context;
+          requestLogId = data.request_log_id;
+          break;
+        case "error":
+          throw new Error(data.message);
+      }
+    }
+  }
+
+  return {
+    region,
+    question,
+    answer,
+    sources,
+    forecast_context: forecastContext,
+    warnings,
+    request_log_id: requestLogId,
+  };
 }
 
 export async function getAgenticRecommendation(

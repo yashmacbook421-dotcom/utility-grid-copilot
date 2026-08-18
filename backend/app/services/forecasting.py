@@ -2,12 +2,12 @@
 
 Trains a gradient-boosted quantile regressor per region on historical demand
 readings (time-of-day / day-of-week / temperature -> demand), then projects
-forward using an estimated future temperature curve. Median + 10/90th
-percentile models give a forecast band instead of a single point estimate,
-which is what makes the output usable for grid-balancing decisions.
+forward using a real weather forecast for the horizon (app.services.
+weather_ingest). Median + 10/90th percentile models give a forecast band
+instead of a single point estimate, which is what makes the output usable
+for grid-balancing decisions.
 """
 
-import math
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
@@ -18,6 +18,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models import DemandReading
+from app.services import weather_ingest
 
 FEATURE_COLUMNS = ["hour_sin", "hour_cos", "dow_sin", "dow_cos", "month_sin", "month_cos", "temperature_c", "is_holiday"]
 
@@ -50,14 +51,6 @@ def _build_features(df: pd.DataFrame) -> pd.DataFrame:
             "is_holiday": df["is_holiday"].astype(float),
         }
     )
-
-
-def estimate_future_temperature(region_profile: dict, ts: pd.Timestamp) -> float:
-    """Deterministic seasonal + diurnal temperature estimate (no noise) for forecasting horizon."""
-    day_of_year = ts.timetuple().tm_yday
-    hour = ts.hour + ts.minute / 60
-    seasonal_swing = region_profile["temp_amplitude"] * math.sin((day_of_year / 365) * 2 * math.pi - math.pi / 2)
-    return region_profile["temp_mean_c"] + seasonal_swing + 4 * math.sin(hour / 24 * 2 * math.pi)
 
 
 def load_history(db: Session, region: str, days: int = 60) -> pd.DataFrame:
@@ -128,7 +121,7 @@ def forecast(db: Session, region: str, region_profile: dict, horizon_hours: int 
         {
             "time": future_times,
             "temperature_c": (
-                [estimate_future_temperature(region_profile, t) for t in future_times]
+                weather_ingest.get_future_temperatures(region, future_times)
                 if has_temperature
                 else [float("nan")] * len(future_times)
             ),
@@ -158,7 +151,11 @@ def forecast(db: Session, region: str, region_profile: dict, horizon_hours: int 
         {
             "time": row.time.to_pydatetime(),
             "demand_mw": row.demand_mw,
-            "temperature_c": row.temperature_c,
+            # Rows not yet covered by a weather backfill (e.g. freshly
+            # refreshed by data_refresh.py) are pandas NaN, not None, once
+            # this column has other real float values in it — NaN isn't
+            # valid JSON and FastAPI's encoder rejects it outright.
+            "temperature_c": None if pd.isna(row.temperature_c) else row.temperature_c,
             "solar_generation_mw": row.solar_generation_mw,
             "ev_load_mw": row.ev_load_mw,
         }

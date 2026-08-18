@@ -24,10 +24,11 @@ class DemandReading(Base):
     time: Mapped[datetime] = mapped_column(DateTime(timezone=True), primary_key=True)
     region: Mapped[str] = mapped_column(String(64), primary_key=True)
     demand_mw: Mapped[float] = mapped_column(Float, nullable=False)
-    # Nullable: regions backed by real data (e.g. California/EIA) don't have a
-    # paired temperature reading — no weather source is wired up for them.
-    # HistGradientBoostingRegressor (forecasting.py) natively handles NaN
-    # features, so this is a deliberate scope choice, not a workaround.
+    # Nullable: EIA demand rows arrive with no temperature at all (see
+    # eia_ingest.fetch_demand); app.data.seed.backfill_weather fills this in
+    # from app.services.weather_ingest after ingest. HistGradientBoosting-
+    # Regressor (forecasting.py) natively handles NaN features, so any row
+    # that a weather backfill couldn't cover just degrades gracefully.
     temperature_c: Mapped[float | None] = mapped_column(Float, nullable=True)
     solar_generation_mw: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     ev_load_mw: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)

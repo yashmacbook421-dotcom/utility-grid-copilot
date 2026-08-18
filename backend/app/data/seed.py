@@ -8,13 +8,14 @@ import glob
 import logging
 import os
 
+import pandas as pd
 import requests
 from sqlalchemy import text
 
 from app.config import get_settings
 from app.db import SessionLocal, engine
 from app.init_db import init_db
-from app.services import eia_ingest, rag
+from app.services import eia_ingest, rag, weather_ingest
 
 PROCEDURES_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "docs", "procedures")
 CUSTOMER_SERVICE_DOCS_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "docs", "customer_service")
@@ -63,6 +64,47 @@ def seed_eia_demand(region: str, days: int = 90) -> None:
     with engine.begin() as conn:
         df.to_sql("demand_readings", conn, if_exists="append", index=False)
     print(f"seeded {len(df)} {region} demand readings from EIA")
+
+
+def backfill_weather(region: str) -> None:
+    """One-time fill of temperature_c on demand_readings rows ingested
+    before weather_ingest existed (or before this region had a coordinate
+    mapped). Naturally idempotent: only rows still NULL get selected, so a
+    region that's already backfilled is a fast no-op on every later boot.
+    """
+    with engine.begin() as conn:
+        rows = conn.execute(
+            text("SELECT time FROM demand_readings WHERE region = :region AND temperature_c IS NULL ORDER BY time"),
+            {"region": region},
+        ).fetchall()
+    if not rows:
+        print(f"{region}: no rows need a temperature backfill")
+        return
+
+    start, end = rows[0][0], rows[-1][0]
+    try:
+        weather = weather_ingest.fetch_historical_temperature(region, start, end)
+    except requests.exceptions.RequestException:
+        logger.exception("Weather backfill request failed for %s, skipping", region)
+        return
+
+    if weather.empty:
+        print(f"{region}: weather API returned no historical data, skipping backfill")
+        return
+
+    temps_by_hour = weather.set_index("time")["temperature_c"]
+    updated = 0
+    with engine.begin() as conn:
+        for (time_val,) in rows:
+            temp = temps_by_hour.get(pd.Timestamp(time_val).floor("h"))
+            if temp is None or pd.isna(temp):
+                continue
+            conn.execute(
+                text("UPDATE demand_readings SET temperature_c = :temp WHERE region = :region AND time = :time"),
+                {"temp": float(temp), "region": region, "time": time_val},
+            )
+            updated += 1
+    print(f"{region}: backfilled temperature for {updated}/{len(rows)} rows")
 
 
 def seed_procedures() -> None:
@@ -119,5 +161,8 @@ if __name__ == "__main__":
     seed_eia_demand("california")
     seed_eia_demand("smud")
     seed_eia_demand("georgia")
+    backfill_weather("california")
+    backfill_weather("smud")
+    backfill_weather("georgia")
     seed_procedures()
     seed_customer_service_docs()

@@ -3,12 +3,13 @@
 import { useEffect, useState } from "react";
 import {
   askCustomerService,
+  getCustomer,
   getOutageStatus,
   listCustomers,
   openCase,
   summarizeCase,
 } from "@/lib/api";
-import { AskCaseResponse, CustomerInfo, OutageStatus } from "@/lib/types";
+import { AskCaseResponse, BillInfo, CustomerInfo, OutageStatus } from "@/lib/types";
 import SourceCard from "@/components/SourceCard";
 
 const CONFIDENCE_LABEL: Record<AskCaseResponse["confidence"], string> = {
@@ -41,7 +42,11 @@ export default function CustomerServicePanel() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [infoView, setInfoView] = useState<"power" | "billing" | null>(null);
   const [outage, setOutage] = useState<OutageStatus | null>(null);
+  const [billInfo, setBillInfo] = useState<BillInfo | null>(null);
+  const [infoLoading, setInfoLoading] = useState(false);
+  const [infoError, setInfoError] = useState<string | null>(null);
   const [summary, setSummary] = useState<string | null>(null);
   const [summarizing, setSummarizing] = useState(false);
 
@@ -58,22 +63,49 @@ export default function CustomerServicePanel() {
   }, [selectedCustomer]);
 
   useEffect(() => {
+    setInfoView(null);
+    setOutage(null);
+    setBillInfo(null);
+    setInfoError(null);
+  }, [serviceArea, selectedCustomerId]);
+
+  async function handleShowPower() {
+    setInfoView("power");
     if (!serviceArea) {
       setOutage(null);
       return;
     }
-    let cancelled = false;
-    getOutageStatus(serviceArea)
-      .then((data) => {
-        if (!cancelled) setOutage(data);
-      })
-      .catch(() => {
-        if (!cancelled) setOutage(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [serviceArea]);
+    setInfoLoading(true);
+    setInfoError(null);
+    try {
+      const data = await getOutageStatus(serviceArea);
+      setOutage(data);
+    } catch (err) {
+      setOutage(null);
+      setInfoError(err instanceof Error ? err.message : "Failed to load power status.");
+    } finally {
+      setInfoLoading(false);
+    }
+  }
+
+  async function handleShowBilling() {
+    setInfoView("billing");
+    if (!selectedCustomerId) {
+      setBillInfo(null);
+      return;
+    }
+    setInfoLoading(true);
+    setInfoError(null);
+    try {
+      const detail = await getCustomer(selectedCustomerId);
+      setBillInfo(detail.bill);
+    } catch (err) {
+      setBillInfo(null);
+      setInfoError(err instanceof Error ? err.message : "Failed to load billing cycle.");
+    } finally {
+      setInfoLoading(false);
+    }
+  }
 
   function resetCase() {
     setCaseId(null);
@@ -190,10 +222,36 @@ export default function CustomerServicePanel() {
           </div>
         )}
 
-        {outage && (
+        {selectedCustomer && (
+          <div className="cs-info-toggle-row">
+            <div className="mode-toggle" role="radiogroup" aria-label="Customer info view">
+              <button
+                type="button"
+                className={`mode-toggle-button${infoView === "power" ? " mode-toggle-active" : ""}`}
+                onClick={handleShowPower}
+                aria-pressed={infoView === "power"}
+              >
+                Power status
+              </button>
+              <button
+                type="button"
+                className={`mode-toggle-button${infoView === "billing" ? " mode-toggle-active" : ""}`}
+                onClick={handleShowBilling}
+                aria-pressed={infoView === "billing"}
+              >
+                Billing cycle
+              </button>
+            </div>
+          </div>
+        )}
+
+        {infoError && <div className="error-banner">{infoError}</div>}
+        {infoLoading && <p className="empty-state">Loading…</p>}
+
+        {!infoLoading && infoView === "power" && outage && (
           <div className={`cs-outage-card cs-outage-${outage.status}`}>
             <p className="step-label" style={{ margin: "0 0 8px" }}>
-              Outage status — {outage.area}
+              Power status — {outage.area}
             </p>
             <div className="cs-outage-grid">
               <div>
@@ -223,6 +281,49 @@ export default function CustomerServicePanel() {
                 </div>
               )}
             </div>
+          </div>
+        )}
+
+        {!infoLoading && infoView === "billing" && (
+          <div className="cs-outage-card">
+            <p className="step-label" style={{ margin: "0 0 8px" }}>
+              Billing cycle{billInfo ? ` — ${billInfo.billing_period}` : ""}
+            </p>
+            {billInfo ? (
+              <div className="cs-outage-grid">
+                <div>
+                  <span className="why-alert-label">Current bill</span>
+                  <span className="why-alert-value">${billInfo.current_bill_usd.toFixed(2)}</span>
+                </div>
+                <div>
+                  <span className="why-alert-label">Previous bill</span>
+                  <span className="why-alert-value">${billInfo.previous_bill_usd.toFixed(2)}</span>
+                </div>
+                <div>
+                  <span className="why-alert-label">Current usage</span>
+                  <span className="why-alert-value">{billInfo.current_usage_kwh} kWh</span>
+                </div>
+                <div>
+                  <span className="why-alert-label">Previous usage</span>
+                  <span className="why-alert-value">{billInfo.previous_usage_kwh} kWh</span>
+                </div>
+                <div>
+                  <span className="why-alert-label">Rate plan</span>
+                  <span className="why-alert-value">{billInfo.rate_plan}</span>
+                </div>
+                {billInfo.usage_change_pct !== null && (
+                  <div>
+                    <span className="why-alert-label">Usage change</span>
+                    <span className="why-alert-value">
+                      {billInfo.usage_change_pct > 0 ? "+" : ""}
+                      {billInfo.usage_change_pct.toFixed(1)}%
+                    </span>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <p className="empty-state">No billing data on file for this customer.</p>
+            )}
           </div>
         )}
       </div>

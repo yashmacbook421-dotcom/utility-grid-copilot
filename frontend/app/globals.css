@@ -556,6 +556,10 @@ a {
   margin-top: 10px;
 }
 
+.cs-info-toggle-row {
+  margin-top: 16px;
+}
+
 .cs-escalation-banner {
   margin-bottom: 16px;
   padding: 12px 16px;

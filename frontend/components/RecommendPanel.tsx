@@ -2,14 +2,14 @@
 
 import { useState } from "react";
 import ReactMarkdown from "react-markdown";
-import { getAgenticRecommendation, getRecommendation, submitFeedback } from "@/lib/api";
+import { getAgenticRecommendation, getRecommendation, streamRecommendation, submitFeedback } from "@/lib/api";
 import { AgenticRecommendationResponse, RecommendationResponse } from "@/lib/types";
 import SourceCard from "@/components/SourceCard";
 import { splitBottomLine } from "@/lib/answerFormat";
 
 const DOWN_REASONS = ["Wrong information", "Poor source", "Missing information", "Irrelevant answer", "Other"];
 
-type Mode = "deterministic" | "agentic";
+type Mode = "deterministic" | "streaming" | "agentic";
 
 export default function RecommendPanel({ region }: { region: string }) {
   const [question, setQuestion] = useState("");
@@ -17,6 +17,7 @@ export default function RecommendPanel({ region }: { region: string }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<RecommendationResponse | AgenticRecommendationResponse | null>(null);
+  const [streamingText, setStreamingText] = useState("");
   const [feedbackGiven, setFeedbackGiven] = useState<"up" | "down" | null>(null);
   const [showDownReasons, setShowDownReasons] = useState(false);
 
@@ -27,12 +28,19 @@ export default function RecommendPanel({ region }: { region: string }) {
     setError(null);
     setFeedbackGiven(null);
     setShowDownReasons(false);
+    setResult(null);
+    setStreamingText("");
     try {
-      const res =
-        mode === "agentic"
-          ? await getAgenticRecommendation(region, question.trim())
-          : await getRecommendation(region, question.trim());
-      setResult(res);
+      if (mode === "agentic") {
+        setResult(await getAgenticRecommendation(region, question.trim()));
+      } else if (mode === "streaming") {
+        const res = await streamRecommendation(region, question.trim(), {
+          onDelta: (text) => setStreamingText((prev) => prev + text),
+        });
+        setResult(res);
+      } else {
+        setResult(await getRecommendation(region, question.trim()));
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to get a recommendation.");
     } finally {
@@ -71,6 +79,14 @@ export default function RecommendPanel({ region }: { region: string }) {
         </button>
         <button
           type="button"
+          className={`mode-toggle-button${mode === "streaming" ? " mode-toggle-active" : ""}`}
+          onClick={() => setMode("streaming")}
+          aria-pressed={mode === "streaming"}
+        >
+          Streaming
+        </button>
+        <button
+          type="button"
           className={`mode-toggle-button${mode === "agentic" ? " mode-toggle-active" : ""}`}
           onClick={() => setMode("agentic")}
           aria-pressed={mode === "agentic"}
@@ -81,7 +97,9 @@ export default function RecommendPanel({ region }: { region: string }) {
       <p className="mode-toggle-hint">
         {mode === "agentic"
           ? "Claude decides for itself whether to search procedures and/or check the forecast, and how many times — usually slower and costlier, shown here to demonstrate the tradeoff."
-          : "Retrieval and forecast are always both fetched first, then one Claude call — predictable cost and latency."}
+          : mode === "streaming"
+            ? "Same deterministic pipeline as the default mode, but the answer renders token-by-token as Claude writes it instead of waiting for the full response. The citation-safety check still needs the complete text, so it runs a beat after the visible text finishes."
+            : "Retrieval and forecast are always both fetched first, then one Claude call — predictable cost and latency."}
       </p>
 
       <form className="recommend-form" onSubmit={handleSubmit}>
@@ -104,6 +122,12 @@ export default function RecommendPanel({ region }: { region: string }) {
       {error && <div className="error-banner">{error}</div>}
 
       {!error && !result && !loading && <p className="empty-state">Ask a question above to get an answer.</p>}
+
+      {mode === "streaming" && loading && !result && (
+        <div className="recommend-answer markdown-body">
+          <ReactMarkdown>{streamingText || "…"}</ReactMarkdown>
+        </div>
+      )}
 
       {result && (
         <div>
