@@ -21,6 +21,8 @@ Same "measure, then pick the constant" approach as _MIN_SIMILARITY in rag.py.
 
 import logging
 
+import pandas as pd
+
 from anthropic import Anthropic
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -174,9 +176,20 @@ def compute_region_status(db: Session, region: str, region_profile: dict) -> dic
     else:
         status = "normal"
 
+    latest_row = history.sort_values("time").iloc[-1] if not history.empty else None
+
     latest_solar = None
-    if not history.empty and "solar_generation_mw" in history.columns:
-        latest_solar = float(history.sort_values("time").iloc[-1]["solar_generation_mw"])
+    if latest_row is not None and "solar_generation_mw" in history.columns:
+        value = latest_row["solar_generation_mw"]
+        latest_solar = None if pd.isna(value) else float(value)
+
+    # Real, unlike solar above (see eia_ingest.py — solar is hardcoded to
+    # 0.0 at ingest, not a live source). Temperature comes from the actual
+    # Open-Meteo backfill/forecast in weather_ingest.py.
+    latest_temp_c = None
+    if latest_row is not None and "temperature_c" in history.columns:
+        value = latest_row["temperature_c"]
+        latest_temp_c = None if pd.isna(value) else float(value)
 
     return {
         "region": region,
@@ -185,6 +198,7 @@ def compute_region_status(db: Session, region: str, region_profile: dict) -> dic
         "baseline_p95_mw": baseline_p95,
         "ratio": round(ratio, 4),
         "latest_solar_generation_mw": latest_solar,
+        "latest_temp_c": latest_temp_c,
     }
 
 

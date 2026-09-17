@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Activity, Compass, Headphones, LayoutGrid, Zap } from "lucide-react";
 import { getForecast, listRegions } from "@/lib/api";
 import { ForecastResponse } from "@/lib/types";
 import RegionSelect from "@/components/RegionSelect";
@@ -11,11 +12,27 @@ import RegionalDashboard from "@/components/RegionalDashboard";
 import WhatIfPanel from "@/components/WhatIfPanel";
 import MonitoringDashboard from "@/components/MonitoringDashboard";
 import CustomerServicePanel from "@/components/CustomerServicePanel";
+import DeliveryAssistPanel from "@/components/DeliveryAssistPanel";
 
-type Tab = "dashboard" | "ask" | "customer-service" | "monitoring";
+type Tab = "dashboard" | "ask" | "customer-service" | "delivery-assist" | "monitoring";
+
+const NAV_ITEMS: { tab: Tab; label: string; icon: typeof Zap }[] = [
+  { tab: "dashboard", label: "Command center", icon: LayoutGrid },
+  { tab: "ask", label: "Grid Copilot", icon: Zap },
+  { tab: "customer-service", label: "Customer Support", icon: Headphones },
+  { tab: "delivery-assist", label: "Delivery Assist", icon: Compass },
+  { tab: "monitoring", label: "Observability", icon: Activity },
+];
 
 export default function Home() {
   const [tab, setTab] = useState<Tab>("dashboard");
+  const [now, setNow] = useState<Date | null>(null);
+
+  useEffect(() => {
+    setNow(new Date());
+    const id = setInterval(() => setNow(new Date()), 60_000);
+    return () => clearInterval(id);
+  }, []);
   const [regions, setRegions] = useState<string[]>([]);
   const [region, setRegion] = useState<string>("");
   const [forecast, setForecast] = useState<ForecastResponse | null>(null);
@@ -46,43 +63,69 @@ export default function Home() {
     setTab("ask");
   }
 
+  const activeLabel = NAV_ITEMS.find((item) => item.tab === tab)?.label ?? "";
+
   return (
-    <main className="container app-shell">
-      <header className="hero">
-        <div className="hero-topline">
-          <div className="brand-lockup">
-            <span className="brand-mark" aria-hidden="true"><i /><i /><i /></span>
-            <span>UTILITY INTELLIGENCE</span>
+    <div className="shell">
+      <aside className="sidebar">
+        <div className="sidebar-brand">
+          <span className="brand-mark" aria-hidden="true">
+            <Zap size={18} strokeWidth={2.4} />
+          </span>
+          <div>
+            <p className="brand-name">Utility AI</p>
+            <p className="brand-sub">Platform · internal</p>
           </div>
-          <div className="live-indicator"><span /> Systems live</div>
         </div>
-        <div className="hero-copy">
-          <p className="hero-eyebrow">Grid operations, made legible</p>
-          <h1>See the signal.<br /><em>Act with context.</em></h1>
-          <p>Forecast demand, investigate grid conditions, and get source-backed operational guidance in one focused workspace.</p>
+
+        <nav className="sidebar-nav">
+          {NAV_ITEMS.map((item) => {
+            const Icon = item.icon;
+            const active = tab === item.tab;
+            return (
+              <button
+                key={item.tab}
+                className={`sidebar-nav-item${active ? " sidebar-nav-item-active" : ""}`}
+                onClick={() => setTab(item.tab)}
+                aria-current={active ? "page" : undefined}
+              >
+                <Icon size={16} strokeWidth={active ? 2.4 : 2} />
+                {item.label}
+              </button>
+            );
+          })}
+        </nav>
+
+        <div className="sidebar-footer">
+          <div className="copilot-status-card">
+            <p className="csc-label">Copilot status</p>
+            <p className="csc-title">Human in the loop</p>
+            <p className="csc-body">AI drafts only — nothing acts on physical infrastructure without approval.</p>
+          </div>
+          <p className="sidebar-note">Data: EIA · Open-Meteo · seeded customer records</p>
         </div>
-        <div className="hero-orbit" aria-hidden="true"><span /><span /><span /></div>
-      </header>
+      </aside>
 
-      {error && <div className="error-banner">{error}</div>}
+      <div className="shell-main">
+        <header className="page-header">
+          <div>
+            <p className="page-eyebrow">Internal · employee-facing demo</p>
+            <h1 className="page-title">{activeLabel}</h1>
+          </div>
+          <div className="page-header-right">
+            <span className="status-pill status-pill-ok">
+              <span className="dot" /> System nominal
+            </span>
+            {now && (
+              <span className="page-timestamp">
+                {now.toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
+              </span>
+            )}
+          </div>
+        </header>
 
-      <nav className="tab-row">
-        <button className={`tab-button${tab === "dashboard" ? " tab-button-active" : ""}`} onClick={() => setTab("dashboard")}>
-          <span aria-hidden="true">◫</span> Command center
-        </button>
-        <button className={`tab-button${tab === "ask" ? " tab-button-active" : ""}`} onClick={() => setTab("ask")}>
-          <span aria-hidden="true">✦</span> Copilot
-        </button>
-        <button
-          className={`tab-button${tab === "customer-service" ? " tab-button-active" : ""}`}
-          onClick={() => setTab("customer-service")}
-        >
-          <span aria-hidden="true">☎</span> Customer Service
-        </button>
-        <button className={`tab-button${tab === "monitoring" ? " tab-button-active" : ""}`} onClick={() => setTab("monitoring")}>
-          <span aria-hidden="true">◌</span> Observability
-        </button>
-      </nav>
+        <main className="page-content">
+          {error && <div className="error-banner">{error}</div>}
 
       {tab === "dashboard" && <RegionalDashboard onSelectRegion={handleSelectRegion} />}
 
@@ -130,7 +173,11 @@ export default function Home() {
 
       {tab === "customer-service" && <CustomerServicePanel />}
 
+      {tab === "delivery-assist" && <DeliveryAssistPanel />}
+
       {tab === "monitoring" && <MonitoringDashboard />}
-    </main>
+        </main>
+      </div>
+    </div>
   );
 }

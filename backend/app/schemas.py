@@ -90,6 +90,7 @@ class RegionStatusResponse(BaseModel):
     baseline_p95_mw: float
     ratio: float
     latest_solar_generation_mw: float | None = None
+    latest_temp_c: float | None = None
 
 
 class DashboardRegionsResponse(BaseModel):
@@ -297,6 +298,25 @@ class AskCaseResponse(BaseModel):
     escalation: EscalationInfo
     warnings: list[str] = Field(default_factory=list)
     iterations: int
+    input_tokens: int
+    output_tokens: int
+    estimated_cost_usd: float | None = None
+    request_log_id: uuid.UUID | None = None
+
+
+class DeliveryAskRequest(BaseModel):
+    area: str
+    question: str = Field(min_length=1, max_length=2000)
+
+
+class DeliveryAskResponse(BaseModel):
+    area: str
+    question: str
+    answer: str
+    confidence: str  # "high" | "medium" | "low"
+    sources: list[SourceCitation]
+    escalation: EscalationInfo
+    warnings: list[str] = Field(default_factory=list)
     input_tokens: int
     output_tokens: int
     estimated_cost_usd: float | None = None

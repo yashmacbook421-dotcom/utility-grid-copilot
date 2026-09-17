@@ -8,7 +8,17 @@ from app.config import get_settings
 from app.data import seed
 from app.db import SessionLocal
 from app.init_db import init_db
-from app.routers import customer_service, dashboard, feedback, forecast, ingest, observability, recommend, surges
+from app.routers import (
+    customer_service,
+    dashboard,
+    delivery_assist,
+    feedback,
+    forecast,
+    ingest,
+    observability,
+    recommend,
+    surges,
+)
 from app.services import data_refresh, surge_watcher
 
 logging.basicConfig(level=logging.INFO)
@@ -36,6 +46,7 @@ app.include_router(dashboard.router)
 app.include_router(feedback.router)
 app.include_router(customer_service.router)
 app.include_router(customer_service.outage_router)
+app.include_router(delivery_assist.router)
 
 
 async def _surge_watcher_loop():
@@ -78,6 +89,7 @@ def on_startup():
     seed.backfill_weather("georgia")
     seed.seed_procedures()
     seed.seed_customer_service_docs()
+    seed.seed_delivery_assist_docs()
     asyncio.create_task(_surge_watcher_loop())
     logger.info("Surge watcher background loop started (interval=%ss)", settings.surge_check_interval_seconds)
     asyncio.create_task(_data_refresh_loop())

@@ -19,6 +19,22 @@ from app.services import eia_ingest, rag, weather_ingest
 
 PROCEDURES_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "docs", "procedures")
 CUSTOMER_SERVICE_DOCS_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "docs", "customer_service")
+DELIVERY_ASSIST_DOCS_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "docs", "delivery_assist")
+
+# Which document_type each file is tagged with at ingest — this is what
+# delivery_assist.answer_question() filters retrieval by per selected area
+# (see AREA_DOCUMENT_TYPES in that module). work-order-prioritization-basics
+# is deliberately the only Work & Asset Management doc, and deliberately
+# doesn't cover crew scheduling — see that file's own scope note.
+_DELIVERY_ASSIST_DOCUMENT_TYPES = {
+    "fixed-recurring-charges.md": "billing_configuration",
+    "billing-adjustment-reason-codes.md": "billing_configuration",
+    "rate-schedule-effective-dating.md": "rate_configuration",
+    "tiered-and-time-of-use-rates.md": "rate_configuration",
+    "usage-validation-lifecycle.md": "meter_data_management",
+    "missing-interval-data-handling.md": "meter_data_management",
+    "work-order-prioritization-basics.md": "work_asset_management",
+}
 
 # Load-bearing, not cosmetic: customer_service_agent.check_escalation() forces
 # an escalation whenever a retrieved source has document_type="safety_procedure".
@@ -156,6 +172,37 @@ def seed_customer_service_docs() -> None:
         db.close()
 
 
+def seed_delivery_assist_docs() -> None:
+    db = SessionLocal()
+    try:
+        for path in sorted(glob.glob(os.path.join(DELIVERY_ASSIST_DOCS_DIR, "*.md"))):
+            filename = os.path.basename(path)
+            exists = db.execute(
+                text(
+                    "SELECT 1 FROM documents "
+                    "WHERE organization = 'delivery_assist' AND source_url = :source LIMIT 1"
+                ),
+                {"source": filename},
+            ).first()
+            if exists:
+                continue
+            title = os.path.splitext(filename)[0].replace("-", " ").title()
+            document_type = _DELIVERY_ASSIST_DOCUMENT_TYPES.get(filename, "delivery_assist_pattern")
+            with open(path, encoding="utf-8") as f:
+                content = f.read()
+            chunks = rag.ingest_document(
+                db,
+                source=filename,
+                title=title,
+                content=content,
+                organization="delivery_assist",
+                document_type=document_type,
+            )
+            print(f"ingested {path} -> {len(chunks)} chunks ({document_type})")
+    finally:
+        db.close()
+
+
 if __name__ == "__main__":
     init_db()
     seed_eia_demand("california")
@@ -166,3 +213,4 @@ if __name__ == "__main__":
     backfill_weather("georgia")
     seed_procedures()
     seed_customer_service_docs()
+    seed_delivery_assist_docs()

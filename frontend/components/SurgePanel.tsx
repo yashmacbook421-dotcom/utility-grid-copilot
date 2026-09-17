@@ -66,7 +66,7 @@ export default function SurgePanel({ region }: { region: string }) {
   }
 
   return (
-    <div className={`card surge-panel${surges.length === 0 ? " surge-panel-idle" : ""}`}>
+    <div className={`card surge-panel${surges.length === 0 ? " surge-panel-idle" : " surge-panel-active"}`}>
       <div className="surge-panel-header">
         <p className="step-label" style={{ margin: 0 }}>
           {surges.length > 0 ? "Grid Copilot noticed something" : "No active alerts"}

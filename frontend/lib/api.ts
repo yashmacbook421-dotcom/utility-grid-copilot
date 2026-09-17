@@ -5,6 +5,7 @@ import {
   CustomerCase,
   CustomerDetail,
   CustomerInfo,
+  DeliveryAskResponse,
   ForecastResponse,
   MonitoringDashboard,
   OutageStatus,
@@ -257,4 +258,18 @@ export async function summarizeCase(caseId: string): Promise<CaseSummaryResponse
 export async function listCases(): Promise<CustomerCase[]> {
   const res = await fetch(`${API_BASE_URL}/api/customer-service/cases`, { cache: "no-store" });
   return handleResponse<CustomerCase[]>(res);
+}
+
+export async function listDeliveryAreas(): Promise<string[]> {
+  const res = await fetch(`${API_BASE_URL}/api/delivery-assist/areas`);
+  return handleResponse<string[]>(res);
+}
+
+export async function askDeliveryAssist(area: string, question: string): Promise<DeliveryAskResponse> {
+  const res = await fetch(`${API_BASE_URL}/api/delivery-assist/ask`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ area, question }),
+  });
+  return handleResponse<DeliveryAskResponse>(res);
 }

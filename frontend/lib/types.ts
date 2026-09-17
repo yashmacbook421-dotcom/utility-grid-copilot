@@ -87,6 +87,7 @@ export interface RegionStatus {
   baseline_p95_mw: number;
   ratio: number;
   latest_solar_generation_mw: number | null;
+  latest_temp_c: number | null;
 }
 
 export interface WhatIfResponse {
@@ -221,4 +222,18 @@ export interface ChartRow {
   predicted?: number;
   lower?: number;
   upper?: number;
+}
+
+export interface DeliveryAskResponse {
+  area: string;
+  question: string;
+  answer: string;
+  confidence: "high" | "medium" | "low";
+  sources: SourceCitation[];
+  escalation: EscalationInfo;
+  warnings: string[];
+  input_tokens: number;
+  output_tokens: number;
+  estimated_cost_usd: number | null;
+  request_log_id: string | null;
 }

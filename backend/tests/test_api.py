@@ -137,6 +137,21 @@ def test_auth_required_rejects_missing_or_invalid_api_key(client, monkeypatch):
     assert client.get("/api/observability/requests", headers={"X-API-Key": "operator-test-key"}).status_code == 200
 
 
+def test_auth_required_protects_operational_read_endpoints(client, monkeypatch):
+    settings = get_settings()
+    monkeypatch.setattr(settings, "auth_required", True)
+    monkeypatch.setattr(settings, "operator_api_key", "operator-test-key")
+    monkeypatch.setattr(settings, "admin_api_key", "admin-test-key")
+
+    for path in (
+        "/api/forecast/regions",
+        "/api/customer-service/customers",
+        "/api/outages/Folsom",
+        "/api/delivery-assist/areas",
+    ):
+        assert client.get(path).status_code == 401
+
+
 def test_auth_roles_restrict_ingestion_to_admin(client, db, monkeypatch):
     settings = get_settings()
     monkeypatch.setattr(settings, "auth_required", True)

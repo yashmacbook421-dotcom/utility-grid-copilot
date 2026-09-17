@@ -46,7 +46,7 @@ _client: Anthropic | None = (
 
 
 @outage_router.get("/{service_area}", response_model=OutageStatusResponse)
-def get_outage(service_area: str):
+def get_outage(service_area: str, _: Principal = Depends(require_operator)):
     data = outage_tool.get_outage_status(service_area)
     if data is None:
         raise HTTPException(
@@ -57,12 +57,12 @@ def get_outage(service_area: str):
 
 
 @router.get("/customers", response_model=list[CustomerInfoResponse])
-def list_customers():
+def list_customers(_: Principal = Depends(require_operator)):
     return customer_data.list_customers()
 
 
 @router.get("/customers/{customer_id}", response_model=CustomerDetailResponse)
-def get_customer(customer_id: str):
+def get_customer(customer_id: str, _: Principal = Depends(require_operator)):
     customer = customer_data.get_customer(customer_id)
     if customer is None:
         raise HTTPException(status_code=404, detail=f"No customer with id '{customer_id}'.")

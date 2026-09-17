@@ -5,12 +5,13 @@ from app.data.regions import REGION_PROFILES
 from app.db import get_db
 from app.schemas import DashboardRegionsResponse, RegionStatusResponse
 from app.services import surge_watcher
+from app.services.auth import Principal, require_operator
 
 router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
 
 
 @router.get("/regions", response_model=DashboardRegionsResponse)
-def get_all_region_statuses(db: Session = Depends(get_db)):
+def get_all_region_statuses(db: Session = Depends(get_db), _: Principal = Depends(require_operator)):
     """Read-only status for every region — safe to poll from the dashboard
     (no Claude call, no side effects), unlike the background surge-watcher
     it shares its threshold math with. Regions with no seeded data yet are

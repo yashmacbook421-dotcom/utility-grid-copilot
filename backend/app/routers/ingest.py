@@ -18,7 +18,7 @@ from app.schemas import (
     PdfIngestResponse,
 )
 from app.services import pdf_ingest, rag
-from app.services.auth import Principal, require_admin
+from app.services.auth import Principal, require_admin, require_operator
 
 router = APIRouter(prefix="/api/ingest", tags=["ingest"])
 rag_router = APIRouter(prefix="/api/rag", tags=["rag"])
@@ -171,7 +171,11 @@ def ingest_directory(
 
 
 @rag_router.get("/sources/{document_id}", response_model=DocumentSourceResponse)
-def get_document_source(document_id: uuid.UUID, db: Session = Depends(get_db)):
+def get_document_source(
+    document_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    _: Principal = Depends(require_operator),
+):
     """Citation drill-down: given a document_id from a SourceCitation, see
     the full document's metadata and every chunk that was made from it.
     """

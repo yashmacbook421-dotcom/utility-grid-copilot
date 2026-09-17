@@ -22,6 +22,7 @@ def get_forecast(
     region: str = Query(..., description="Grid region id, e.g. 'california'"),
     horizon_hours: int = Query(default=24, ge=1, le=72),
     db: Session = Depends(get_db),
+    _: Principal = Depends(require_operator),
 ):
     if region not in REGION_PROFILES:
         raise HTTPException(status_code=404, detail=f"Unknown region '{region}'. Valid: {list(REGION_PROFILES)}")
@@ -35,7 +36,7 @@ def get_forecast(
 
 
 @router.get("/regions")
-def list_regions():
+def list_regions(_: Principal = Depends(require_operator)):
     return {"regions": list(REGION_PROFILES.keys())}
 
 
