@@ -1,10 +1,16 @@
 # Utility Grid Copilot
 
-A demand-forecasting and grid-operations copilot for utility operators.
-Combines a trained ML forecasting model with a Claude-powered RAG pipeline
-grounded in real regulatory/reliability documents (NERC, CAISO, FERC, CPUC)
-plus a set of hand-written procedures, so every recommendation is traceable
-back to a specific document, page, and section — not a black box.
+An AI platform for utility operations, customer service, and delivery
+consultants — three workspaces sharing one Claude-powered RAG pipeline and
+one guardrail architecture. Grid Copilot combines a trained ML forecasting
+model with retrieval grounded in real regulatory/reliability documents
+(NERC, CAISO, FERC, CPUC) plus hand-written procedures; Customer Service
+Agent Assist adds tool-orchestrated outage/billing lookups with
+deterministic safety escalation and case memory; Delivery Assist points the
+same retrieval engine at a third domain — CIS-implementation configuration
+patterns for delivery consultants — to prove the architecture generalizes
+rather than being a one-off. Every recommendation is traceable back to a
+specific document, page, and section — not a black box.
 
 Built as a working demonstration of the full AI-engineering stack: RAG,
 retrieval evaluation, guardrails, agentic patterns, observability, and
@@ -22,8 +28,9 @@ docker compose up -d --build
 
 That starts the database, backend, and frontend, and self-seeds real demand
 history (via the EIA API, for California/SMUD/Georgia), the hand-written
-grid-ops procedure documents, and the customer-service knowledge base
-automatically on first boot. Open **http://localhost:3000**.
+grid-ops procedure documents, the customer-service knowledge base, and the
+delivery-assist knowledge base automatically on first boot. Open
+**http://localhost:3000**.
 
 ### Adding the real document corpus
 
@@ -72,6 +79,7 @@ pytest tests/ -v
 | Regional demand data (real EIA data: California, SMUD, Georgia) | `backend/app/services/eia_ingest.py`, `backend/app/data/regions.py` |
 | Customer Service Agent Assist (outage/billing tools, confidence + escalation guardrails, case summaries) | `backend/app/services/customer_service_agent.py`, `backend/app/routers/customer_service.py` |
 | Cost-routed mode (cheap model gathers tool data, strong model writes the final answer) | `backend/app/services/customer_service_agent.py` (`run_customer_service_turn_routed`), `backend/app/evals/customer_service_cost_comparison.py` |
+| Delivery Assist (a third RAG domain — CIS-implementation patterns for delivery consultants, same retrieval engine, model-reported no-coverage override on confidence) | `backend/app/services/delivery_assist.py`, `backend/app/routers/delivery_assist.py`, `backend/docs/delivery_assist/` |
 
 Full reasoning behind each decision — why no reranker in production, why
 the similarity threshold is what it is, what's been measured vs. assumed —
@@ -82,7 +90,10 @@ is in [ARCHITECTURE.md](ARCHITECTURE.md), not just the code comments.
 - The hand-written grid-ops procedure documents are stand-ins, not real
   vetted utility SOPs — labeled `organization="synthetic"` throughout so
   this is never ambiguous. Same is true of the customer-service knowledge
-  base (`organization="customer_service"`).
+  base (`organization="customer_service"`) and the delivery-assist
+  knowledge base (`organization="delivery_assist"`, explicitly labeled
+  "illustrative example" in every document, never presented as real vendor
+  documentation).
 - Section detection on real PDFs is regex-based heuristics, tuned against
   the actual documents in this corpus — not guaranteed to generalize to
   arbitrarily different document layouts without further tuning.

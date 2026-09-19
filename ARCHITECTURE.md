@@ -434,6 +434,8 @@ re-run rather than reporting a partial result.
 | `POST /api/customer-service/cases`, `GET /api/customer-service/cases[/{id}]` | Open/list/retrieve a customer-service case |
 | `POST /api/customer-service/cases/{id}/ask` | Ask a question within a case; `mode: standard\|routed` picks the answering pipeline |
 | `POST /api/customer-service/cases/{id}/summary` | Generate + save a structured case summary, closes the case |
+| `GET /api/delivery-assist/areas` | List the four Delivery Assist product areas |
+| `POST /api/delivery-assist/ask` | Ask a configuration/process question within one area; single-turn RAG, no case object |
 
 ## Final round: what-if, dashboard, feedback, severity, monitoring
 
@@ -528,19 +530,69 @@ tradeoff — cheaper but occasionally less thorough at tool selection — is
 shown in the UI rather than hidden: the mode toggle's hint text states it
 directly, and each answer's cost badge shows which mode produced it.
 
+## Delivery Assist
+
+A third workspace, same RAG engine, deliberately unrelated domain: where the
+operator copilot answers "should we act on this forecast" and Customer
+Service answers "why is this customer's power out," Delivery Assist answers
+a utility-implementation delivery consultant's configuration/process
+questions — billing, rate configuration, meter data management, work/asset
+management. The point isn't the domain, it's proving `rag.retrieve()`
+generalizes to a third `organization="delivery_assist"` tag with zero
+pipeline changes, the same way it already did for the jump from grid-ops to
+customer-service.
+
+Reuses the RAG pipeline as-is; no tool-use loop this time (no operational
+lookups needed, just retrieval + one Claude call — closer in shape to the
+original deterministic `/api/recommend` than to the agentic customer-service
+loop). What's new:
+
+- **7 illustrative documents** (`backend/docs/delivery_assist/*.md`), each
+  explicitly labeled as a generic pattern, not real vendor documentation —
+  `work-order-prioritization-basics.md` is deliberately the only Work &
+  Asset Management doc and deliberately doesn't cover crew scheduling, so
+  a crew-scheduling question has a genuine, unstaged gap to hit.
+- **Area-scoped retrieval**: `AREA_DOCUMENT_TYPES` maps each UI-facing area
+  to a `document_type`, and a question is only searched within its selected
+  area — cross-area matches would mostly be noise on a corpus this small.
+- **A real confidence-classification bug, found by testing and fixed**: a
+  document's own honest "we don't cover crew scheduling" disclaimer
+  retrieved with *high* similarity to a crew-scheduling question, because
+  refusal text about a topic necessarily shares that topic's vocabulary.
+  `classify_confidence()` originally trusted similarity alone and got this
+  backwards — labeled it high confidence, no escalation, the opposite of
+  correct, even though Claude's own generated answer correctly recognized
+  it had no real answer. Fixed with a second, deterministic check:
+  `NO_COVERAGE_MARKER`, an exact required phrase the system prompt asks for
+  when the excerpts don't actually answer the question, checked
+  post-generation and used to override an optimistic similarity-based score.
+  Neither signal — retrieval similarity, model self-report — is trusted
+  alone.
+- **Citation-faithfulness check**, matching Customer Service: every answer's
+  `[Source: ...]` citations are checked against what was actually retrieved,
+  surfaced as a `warnings[]` entry rather than a silent risk.
+
 ## Testing
 
 `backend/tests/` (pytest) — added alongside the eval harness, not instead
 of it: evals answer "is retrieval/generation quality good," tests answer
-"does this specific function do what it claims." `pytest tests/ -v`, 40
+"does this specific function do what it claims." `pytest tests/ -v`, 46
 tests: PDF extraction/chunking/section-detection against a real downloaded
 document (not a synthetic fixture), the two prompt-injection defenses
 (question-based and document-embedded, skipped automatically without
 `ANTHROPIC_API_KEY`), metadata filtering, citation extraction (both formats),
-FastAPI endpoint tests via `TestClient`, and `test_customer_service.py`'s
+FastAPI endpoint tests via `TestClient`, `test_customer_service.py`'s
 7 scenario tests (outage lookup, restoration-time accuracy, billing,
 out-of-scope refusal, safety escalation, unknown-area low confidence,
-conversation memory), also skipped without `ANTHROPIC_API_KEY`.
+conversation memory), `test_delivery_assist.py`'s 5 scenario tests (grounded
+high/medium-confidence answers with area-filtered sources, the real
+out-of-scope-escalates-instead-of-guessing case, unknown-area rejection,
+area listing), and `test_api.py::test_auth_required_protects_operational_read_endpoints`
+covering the `require_operator` gate added to several previously-open read
+endpoints (region status, forecast, customer list, outage lookup, citation
+drill-down) — a no-op with the default `auth_required=False`, but real
+protection once a deployment sets it `True`. All are skipped automatically
+without `ANTHROPIC_API_KEY` where they need a real Claude call.
 
 One real bug was caught by this suite, not by inspection:
 `test_chunks_never_cross_a_page_boundary` failed on first run, which is how
