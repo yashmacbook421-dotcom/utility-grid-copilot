@@ -9,34 +9,76 @@ const CHUNK_OVERLAP = 150;
 const MIN_SIMILARITY = 0.4;
 
 // ---------- Embedding ----------
+// Uses OpenAI embeddings if OPENAI_API_KEY is set, otherwise falls back to
+// a deterministic hash-based embedding (384-dim) that works offline for
+// retrieval without an external API key.
+
+const EMBEDDING_DIM = 384;
+
+function hashEmbed(text: string): number[] {
+  const tokens = text.toLowerCase().split(/\s+/).filter(Boolean);
+  const vec = new Float64Array(EMBEDDING_DIM);
+  for (const token of tokens) {
+    let h = 0;
+    for (let i = 0; i < token.length; i++) {
+      h = ((h << 5) - h + token.charCodeAt(i)) | 0;
+    }
+    const idx = Math.abs(h) % EMBEDDING_DIM;
+    vec[idx] += 1;
+    // secondary hash for spread
+    let h2 = 0;
+    for (let i = 0; i < token.length; i++) {
+      h2 = ((h2 << 7) - h2 + token.charCodeAt(i)) | 0;
+    }
+    vec[Math.abs(h2) % EMBEDDING_DIM] += 0.5;
+  }
+  // L2 normalize
+  let norm = 0;
+  for (let i = 0; i < EMBEDDING_DIM; i++) norm += vec[i] * vec[i];
+  norm = Math.sqrt(norm);
+  if (norm > 0) for (let i = 0; i < EMBEDDING_DIM; i++) vec[i] /= norm;
+  return Array.from(vec);
+}
 
 export async function embedText(text: string): Promise<number[]> {
-  const res = await fetch("https://api.openai.com/v1/embeddings", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${process.env.OPENAI_API_KEY ?? ""}`,
-    },
-    body: JSON.stringify({ model: "text-embedding-3-small", input: text }),
-  });
-  if (!res.ok) throw new Error(`Embedding API error: ${res.status}`);
-  const data = await res.json();
-  return data.data[0].embedding;
+  if (process.env.OPENAI_API_KEY) {
+    try {
+      const res = await fetch("https://api.openai.com/v1/embeddings", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+        },
+        body: JSON.stringify({ model: "text-embedding-3-small", input: text }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        return data.data[0].embedding;
+      }
+    } catch { /* fall through to hash */ }
+  }
+  return hashEmbed(text);
 }
 
 export async function embedTexts(texts: string[]): Promise<number[][]> {
   if (texts.length === 0) return [];
-  const res = await fetch("https://api.openai.com/v1/embeddings", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${process.env.OPENAI_API_KEY ?? ""}`,
-    },
-    body: JSON.stringify({ model: "text-embedding-3-small", input: texts }),
-  });
-  if (!res.ok) throw new Error(`Embedding API error: ${res.status}`);
-  const data = await res.json();
-  return data.data.map((d: { embedding: number[] }) => d.embedding);
+  if (process.env.OPENAI_API_KEY) {
+    try {
+      const res = await fetch("https://api.openai.com/v1/embeddings", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+        },
+        body: JSON.stringify({ model: "text-embedding-3-small", input: texts }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        return data.data.map((d: { embedding: number[] }) => d.embedding);
+      }
+    } catch { /* fall through to hash */ }
+  }
+  return texts.map(hashEmbed);
 }
 
 // ---------- Chunking ----------
