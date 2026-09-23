@@ -52,11 +52,13 @@ export function chunkText(text: string, chunkSize = CHUNK_SIZE, overlap = CHUNK_
   while (start < len) {
     let end = Math.min(start + chunkSize, len);
     if (end < len) {
+      const slice = trimmed.slice(start + 1, end);
       const wsBoundary = Math.max(
-        trimmed.lastIndexOf(" ", start + 1, end),
-        trimmed.lastIndexOf("\n", start + 1, end),
+        slice.lastIndexOf(" "),
+        slice.lastIndexOf("\n"),
       );
-      if (wsBoundary > start) end = wsBoundary;
+      const adjusted = wsBoundary > -1 ? wsBoundary + start + 1 : -1;
+      if (adjusted > start) end = adjusted;
     }
     const chunk = trimmed.slice(start, end).trim();
     if (chunk) chunks.push(chunk);

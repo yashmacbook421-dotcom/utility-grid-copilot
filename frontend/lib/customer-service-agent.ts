@@ -518,7 +518,7 @@ export async function generateCaseSummary(
       continue;
     }
     if (Array.isArray(content)) {
-      for (const block of content as Record<string, unknown>[]) {
+      for (const block of content as unknown as Record<string, unknown>[]) {
         if (block["type"] === "text") lines.push(`${role}: ${block["text"]}`);
         else if (block["type"] === "tool_result") lines.push(`tool_result: ${block["content"]}`);
         else if (block["type"] === "tool_use") lines.push(`tool_call: ${block["name"]}(${JSON.stringify(block["input"])})`);

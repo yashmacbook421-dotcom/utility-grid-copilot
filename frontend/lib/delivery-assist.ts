@@ -50,7 +50,7 @@ export function classifyConfidence(sources: SourceCitation[]): "high" | "medium"
 
 export function checkEscalation(confidence: string): { required: boolean; reason: string | null } {
   if (confidence === "low") return { required: true, reason: "insufficient_information" };
-  return { required: false };
+  return { required: false, reason: null };
 }
 
 export interface DeliveryAssistResult {
